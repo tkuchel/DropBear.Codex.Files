@@ -9,6 +9,7 @@
     <ItemGroup>
       <PackageReference Include="DropBear.Codex.AppLogger" Version="2024.3.4" />
       <PackageReference Include="DropBear.Codex.Core" Version="2024.3.12" />
+      <PackageReference Include="DropBear.Codex.Serialization" Version="2024.3.3" />
       <PackageReference Include="DropBear.Codex.StateManagement" Version="2024.3.5" />
       <PackageReference Include="DropBear.Codex.Utilities" Version="2024.3.5" />
       <PackageReference Include="DropBear.Codex.Validation" Version="2024.3.1" />
@@ -16,6 +17,13 @@
         <PrivateAssets>all</PrivateAssets>
         <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="Enums\" />
+      <Folder Include="Intefaces\" />
+      <Folder Include="Models\" />
+      <Folder Include="Services\" />
     </ItemGroup>
 
 </Project>

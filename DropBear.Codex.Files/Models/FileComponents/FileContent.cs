@@ -1,29 +1,38 @@
-using System.Collections.ObjectModel;
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Models.Bases;
 
 namespace DropBear.Codex.Files.Models.FileComponents;
 
-/// <summary>
-///     Represents the content of a custom file type as a read-only collection of bytes.
-/// </summary>
 public class FileContent : FileComponentBase, IFileContent
 {
-    private ReadOnlyCollection<byte> _content = new(Array.Empty<byte>());
+    // Backing field for the Contents collection
+    private readonly List<IContentContainer> _contents = [];
+
+    // Expose contents as IReadOnlyList
+    public IReadOnlyList<IContentContainer> Contents => _contents.AsReadOnly();
 
     /// <summary>
-    ///     Gets the file content as a read-only list of bytes.
+    ///     Adds a content container to the file content.
     /// </summary>
-    public IReadOnlyList<byte> Content => _content;
-
-    /// <summary>
-    ///     Sets the file content from a sequence of bytes.
-    /// </summary>
-    /// <param name="content">The content to set.</param>
-    /// <exception cref="ArgumentNullException">Thrown if content is null.</exception>
-    public void SetContent(IEnumerable<byte> content)
+    /// <param name="content">The content container to add.</param>
+    public void AddContent(IContentContainer content)
     {
         if (content is null) throw new ArgumentNullException(nameof(content), "Content cannot be null.");
-        _content = new ReadOnlyCollection<byte>(content.ToList());
+        _contents.Add(content);
     }
+
+    /// <summary>
+    ///     Removes a content container from the file content.
+    /// </summary>
+    /// <param name="content">The content container to remove.</param>
+    public void RemoveContent(IContentContainer content)
+    {
+        if (content is null) throw new ArgumentNullException(nameof(content), "Content cannot be null.");
+        _contents.Remove(content);
+    }
+
+    /// <summary>
+    ///     Clears all content containers from the file content.
+    /// </summary>
+    public void ClearContents() => _contents.Clear();
 }

@@ -1,7 +1,11 @@
+using DropBear.Codex.Files.Models;
+
 namespace DropBear.Codex.Files.Interfaces;
 
 public interface IFileContent
 {
-    IReadOnlyList<byte> Content { get; }
-    void SetContent(IEnumerable<byte> content);
+    IReadOnlyList<IContentContainer> Contents { get; }
+    void AddContent(IContentContainer content);
+    void RemoveContent(IContentContainer content);
+    void ClearContents();
 }

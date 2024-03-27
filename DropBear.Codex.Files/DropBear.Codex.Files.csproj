@@ -21,8 +21,6 @@
 
     <ItemGroup>
       <Folder Include="Enums\" />
-      <Folder Include="Services\" />
-      <Folder Include="Validation\Strategies\" />
     </ItemGroup>
 
 </Project>

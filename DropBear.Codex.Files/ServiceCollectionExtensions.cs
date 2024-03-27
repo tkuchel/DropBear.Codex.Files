@@ -1,4 +1,6 @@
 ﻿using DropBear.Codex.AppLogger.Extensions;
+using DropBear.Codex.Files.Interfaces;
+using DropBear.Codex.Files.Services;
 using DropBear.Codex.Serialization;
 using DropBear.Codex.Validation;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,5 +18,6 @@ public static class ServiceCollectionExtensions
         services.AddAppLogger();
         services.AddValidationServices();
         services.AddDataSerializationServices();
+        services.AddTransient<IFileManager, FileManager>();
     }
 }

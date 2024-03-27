@@ -7,36 +7,11 @@ using static System.DateTimeOffset;
 
 namespace DropBear.Codex.Files.Models;
 
-public class DropBearFile : FileBase
+public class DropBearFile(IFileMetaData metaData, ICompressionSettings compressionSettings, IFileContent content)
+    : FileBase
 {
-    public DropBearFile()
-    {
-        // Initialize FileHeader with unique signature and version info
-        Header = new FileHeader(); // Assuming FileHeader implements IFileHeader
-
-        // Example MetaData initialization
-        MetaData = new FileMetaData(
-            createdDate: Now,
-            lastModifiedDate: Now,
-            "Author Name",
-            new List<ContentTypeInfo>
-            {
-                new() { AssemblyName = "ExampleAssembly", TypeName = "ExampleType", Namespace = "ExampleNamespace" },
-            });
-
-        // Example CompressionSettings initialization
-        CompressionSettings = new CompressionSettings
-        {
-            IsCompressed = true, CompressionLevel = CompressionLevel.Optimal
-        };
-
-        // Initialize FileContent with example data
-        Content = new FileContent();
-        Content.SetContent(new byte[] { 0x01, 0x02, 0x03, 0x04 }); // Sample content bytes
-    }
-
-    public IFileHeader Header { get; private set; }
-    public IFileMetaData MetaData { get; private set; }
-    public ICompressionSettings CompressionSettings { get; private set; }
-    public IFileContent Content { get; }
+    public IFileHeader Header { get; private set; } = new FileHeader();
+    public IFileMetaData MetaData { get; private set; } = metaData;
+    public ICompressionSettings CompressionSettings { get; private set; } = compressionSettings;
+    public IFileContent Content { get; } = content;
 }

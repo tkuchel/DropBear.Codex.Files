@@ -4,23 +4,15 @@ using DropBear.Codex.Files.Models.FileComponents.SubComponents;
 
 namespace DropBear.Codex.Files.Models.FileComponents;
 
-public class FileMetaData : FileComponentBase, IFileMetaData
+public class FileMetaData(string author, IList<ContentTypeInfo> contentTypes) : FileComponentBase, IFileMetaData
 {
-    private readonly DateTimeOffset _createdDate;
-    private readonly DateTimeOffset _lastModifiedDate;
-    private readonly string _author;
-    private readonly List<ContentTypeInfo> _contentTypes;
+    public DateTimeOffset Created { get; } = DateTimeOffset.Now;
 
-    public FileMetaData(DateTimeOffset createdDate, DateTimeOffset lastModifiedDate, string author, List<ContentTypeInfo> contentTypes)
-    {
-        _createdDate = createdDate;
-        _lastModifiedDate = lastModifiedDate;
-        _author = author;
-        _contentTypes = contentTypes;
-    }
+    public DateTimeOffset LastModified { get; private set; } = DateTimeOffset.Now;
 
-    public DateTimeOffset Created => _createdDate;
-    public DateTimeOffset LastModified => _lastModifiedDate;
-    public string Author => _author;
-    public List<ContentTypeInfo> ContentTypes => _contentTypes;
+    public string Author { get; } = author;
+
+    public IReadOnlyCollection<ContentTypeInfo> ExpectedContentTypes => contentTypes.AsReadOnly();
+
+    public void UpdateLastModified() => LastModified = DateTimeOffset.Now;
 }

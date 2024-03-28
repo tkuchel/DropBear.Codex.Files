@@ -91,6 +91,39 @@ public class FileManager : IFileManager
             _logger.LogError(Encoding.UTF8.GetString(errorBytes));
             return Result<DropBearFile>.Failure(errorMessage);
         }
+        
+        // Messagepack serialization checks
+        var headerOk = await _dataSerializer.IsMessagePackSerializable<FileHeader>().ConfigureAwait(false);
+        
+        if (!headerOk.IsSuccess)
+        {
+            _logger.LogError("FileHeader is not serializable.");
+            return Result<DropBearFile>.Failure("FileHeader is not serializable.");
+        }
+        
+        var metaDataOk = await _dataSerializer.IsMessagePackSerializable<FileMetaData>().ConfigureAwait(false);
+        
+        if (!metaDataOk.IsSuccess)
+        {
+            _logger.LogError("FileMetaData is not serializable.");
+            return Result<DropBearFile>.Failure("FileMetaData is not serializable.");
+        }
+        
+        var compressionSettingsOk = await _dataSerializer.IsMessagePackSerializable<CompressionSettings>().ConfigureAwait(false);
+        
+        if (!compressionSettingsOk.IsSuccess)
+        {
+            _logger.LogError("CompressionSettings is not serializable.");
+            return Result<DropBearFile>.Failure("CompressionSettings is not serializable.");
+        }
+        
+        var contentOk = await _dataSerializer.IsMessagePackSerializable<FileContent>().ConfigureAwait(false);
+        
+        if (!contentOk.IsSuccess)
+        {
+            _logger.LogError("FileContent is not serializable.");
+            return Result<DropBearFile>.Failure("FileContent is not serializable.");
+        }
 
         _logger.LogInformation("File created successfully");
         return Result<DropBearFile>.Success(createdFile);

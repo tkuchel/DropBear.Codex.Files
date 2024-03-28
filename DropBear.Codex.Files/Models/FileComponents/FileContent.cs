@@ -1,14 +1,22 @@
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Models.Bases;
+using MessagePack;
 
 namespace DropBear.Codex.Files.Models.FileComponents;
 
+/// <summary>
+///     Represents the content of a file.
+/// </summary>
+[MessagePackObject]
 public class FileContent : FileComponentBase, IFileContent
 {
     // Backing field for the Contents collection
-    private readonly List<IContentContainer> _contents = [];
+    private readonly List<IContentContainer> _contents = new();
 
-    // Expose contents as IReadOnlyList
+    /// <summary>
+    ///     Gets the content containers in the file content.
+    /// </summary>
+    [Key(0)]
     public IReadOnlyList<IContentContainer> Contents => _contents.AsReadOnly();
 
     /// <summary>

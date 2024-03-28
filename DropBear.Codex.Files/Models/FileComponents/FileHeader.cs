@@ -1,11 +1,19 @@
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Models.Bases;
 using DropBear.Codex.Files.Models.FileComponents.SubComponents;
+using MessagePack;
 
 namespace DropBear.Codex.Files.Models.FileComponents;
 
+/// <summary>
+///     Represents the header of a file.
+/// </summary>
+[MessagePackObject]
 public class FileHeader : FileComponentBase, IFileHeader
 {
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="FileHeader" /> class.
+    /// </summary>
     public FileHeader()
     {
         // Encode the Year, Month, and Day as bytes. Assuming the Year might need more than one byte.
@@ -29,7 +37,15 @@ public class FileHeader : FileComponentBase, IFileHeader
         FileSignature = new FileSignature(signatureBytes, "application/dropbearfile", ".dbf");
     }
 
+    /// <summary>
+    ///     Gets the version of the file header.
+    /// </summary>
+    [Key(0)]
     public Version Version { get; } = new(2024, 3, 1);
 
+    /// <summary>
+    ///     Gets the signature of the file header.
+    /// </summary>
+    [Key(1)]
     public FileSignature FileSignature { get; }
 }

@@ -1,9 +1,12 @@
-using System.IO.Compression;
-
 namespace DropBear.Codex.Files.Interfaces;
 
+/// <summary>
+///     Interface representing compression settings for file operations.
+/// </summary>
 public interface ICompressionSettings
 {
-    public bool IsCompressed { get; set; }
-    public CompressionLevel CompressionLevel { get; set; }
+    /// <summary>
+    ///     Gets or sets a value indicating whether compression is enabled.
+    /// </summary>
+    bool IsCompressed { get; set; }
 }

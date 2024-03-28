@@ -2,40 +2,76 @@ using System.Collections.ObjectModel;
 
 namespace DropBear.Codex.Files.Models.FileComponents.SubComponents;
 
-public class FileSignature(
-    byte[] signature,
-    string mediaType,
-    string extension,
-    int headerLength = 0,
-    int offset = 0)
-    : IEquatable<FileSignature>
+/// <summary>
+///     Represents a file signature.
+/// </summary>
+public class FileSignature : IEquatable<FileSignature>
 {
-    public IReadOnlyList<byte> Signature { get; } = new ReadOnlyCollection<byte>(signature ??
-        throw new ArgumentNullException(nameof(signature),
-            "Signature cannot be null."));
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="FileSignature" /> class.
+    /// </summary>
+    /// <param name="signature">The file signature bytes.</param>
+    /// <param name="mediaType">The media type associated with the file signature.</param>
+    /// <param name="extension">The file extension associated with the file signature.</param>
+    /// <param name="headerLength">The length of the file signature header.</param>
+    /// <param name="offset">The offset of the file signature within the file.</param>
+    public FileSignature(byte[] signature, string mediaType, string extension, int headerLength = 0, int offset = 0)
+    {
+        Signature = new ReadOnlyCollection<byte>(signature ??
+                                                 throw new ArgumentNullException(nameof(signature),
+                                                     "Signature cannot be null."));
+        HeaderLength = headerLength == 0 ? Signature.Count : headerLength;
+        Extension = extension ?? throw new ArgumentNullException(nameof(extension), "Extension cannot be null.");
+        MediaType = !string.IsNullOrEmpty(mediaType)
+            ? mediaType
+            : throw new ArgumentNullException(nameof(mediaType), "MediaType cannot be null or empty.");
+        Offset = offset;
+    }
 
-    public int HeaderLength { get; } = headerLength is 0 ? signature.Length : headerLength;
+    /// <summary>
+    ///     Gets the file signature bytes.
+    /// </summary>
+    public IReadOnlyList<byte> Signature { get; }
 
-    public string Extension { get; } = extension ??
-                                       throw new ArgumentNullException(nameof(extension),
-                                           "Extension cannot be null."); // Assuming extension should not be null or empty either
+    /// <summary>
+    ///     Gets the length of the file signature header.
+    /// </summary>
+    public int HeaderLength { get; }
 
-    public string MediaType { get; } = !string.IsNullOrEmpty(mediaType)
-        ? mediaType
-        : throw new ArgumentNullException(nameof(mediaType), "MediaType cannot be null or empty.");
+    /// <summary>
+    ///     Gets the file extension associated with the file signature.
+    /// </summary>
+    public string Extension { get; }
 
-    public int Offset { get; } = offset;
+    /// <summary>
+    ///     Gets the media type associated with the file signature.
+    /// </summary>
+    public string MediaType { get; }
 
-    public bool Equals(FileSignature? other) =>
-        (other is not null &&
-         ReferenceEquals(this, other)) ||
-        (GetType() == other?.GetType() &&
-         Signature.SequenceEqual(other.Signature) &&
-         HeaderLength == other.HeaderLength &&
-         Extension == other.Extension &&
-         MediaType == other.MediaType &&
-         Offset == other.Offset);
+    /// <summary>
+    ///     Gets the offset of the file signature within the file.
+    /// </summary>
+    public int Offset { get; }
 
+    /// <summary>
+    ///     Determines whether the specified object is equal to the current file signature.
+    /// </summary>
+    /// <param name="other">The object to compare with the current file signature.</param>
+    /// <returns><c>true</c> if the specified object is equal to the current file signature; otherwise, <c>false</c>.</returns>
+    public bool Equals(FileSignature? other) => (other is not null &&
+                                                 ReferenceEquals(this, other)) ||
+                                                (GetType() == other?.GetType() &&
+                                                 Signature.SequenceEqual(other.Signature) &&
+                                                 HeaderLength == other.HeaderLength &&
+                                                 Extension == other.Extension &&
+                                                 MediaType == other.MediaType &&
+                                                 Offset == other.Offset);
+
+    /// <summary>
+    ///     Determines whether the specified stream matches the file signature.
+    /// </summary>
+    /// <param name="stream">The stream to check for a match.</param>
+    /// <returns><c>true</c> if the stream matches the file signature; otherwise, <c>false</c>.</returns>
     public bool IsMatch(Stream stream)
     {
         if (stream is null) throw new ArgumentNullException(nameof(stream), "Stream cannot be null.");
@@ -54,8 +90,17 @@ public class FileSignature(
         }
     }
 
+    /// <summary>
+    ///     Determines whether the specified object is equal to the current file signature.
+    /// </summary>
+    /// <param name="obj">The object to compare with the current file signature.</param>
+    /// <returns><c>true</c> if the specified object is equal to the current file signature; otherwise, <c>false</c>.</returns>
     public override bool Equals(object? obj) => Equals(obj as FileSignature);
 
+    /// <summary>
+    ///     Returns the hash code for the current file signature.
+    /// </summary>
+    /// <returns>A hash code for the current file signature.</returns>
     public override int GetHashCode()
     {
         unchecked
@@ -69,5 +114,9 @@ public class FileSignature(
         }
     }
 
+    /// <summary>
+    ///     Returns a string that represents the current object.
+    /// </summary>
+    /// <returns>A string that represents the current object.</returns>
     public override string ToString() => $"{MediaType} ({Extension})";
 }

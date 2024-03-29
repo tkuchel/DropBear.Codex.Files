@@ -1,5 +1,4 @@
 using System.Text;
-using DropBear.Codex.AppLogger.Factories;
 using DropBear.Codex.AppLogger.Interfaces;
 using DropBear.Codex.Core.ReturnTypes;
 using DropBear.Codex.Files.Interfaces;
@@ -9,7 +8,8 @@ using DropBear.Codex.Files.Utils;
 using DropBear.Codex.Files.Validation.Strategies;
 using DropBear.Codex.Serialization.Enums;
 using DropBear.Codex.Serialization.Interfaces;
-using DropBear.Codex.Utilities.Hashing;
+using DropBear.Codex.Utilities.Hashing.Interfaces;
+using DropBear.Codex.Utilities.MessageTemplates;
 using DropBear.Codex.Validation.ReturnTypes;
 using DropBear.Codex.Validation.StrategyValidation.Interfaces;
 
@@ -29,12 +29,16 @@ public class FileManager : IFileManager
     /// <param name="logger">The logger for logging messages.</param>
     /// <param name="strategyValidator">The validator for validating strategies.</param>
     /// <param name="dataSerializer">The data serializer for serializing and deserializing data.</param>
+    /// <param name="hasher">The hashing service for hashing data.</param>
+    /// <param name="messageTemplateManager">The message template manager for managing message templates.</param>
     public FileManager(IAppLogger<FileManager> logger, IStrategyValidator strategyValidator,
-        IDataSerializer dataSerializer)
+        IDataSerializer dataSerializer, IHashingService hasher, IMessageTemplateManager messageTemplateManager)
     {
         _strategyValidator = strategyValidator;
         _logger = logger;
         _dataSerializer = dataSerializer;
+        _hasher = hasher;
+        _messageTemplateManager = messageTemplateManager;
 
         var initializationResult = InitializeFileManager();
         if (initializationResult.IsFailure) _logger.LogError(initializationResult.ErrorMessage);
@@ -46,7 +50,8 @@ public class FileManager : IFileManager
 
     private static readonly IReadOnlyList<byte> ExpectedSignatureBytes = new FileHeader().FileSignature.Signature;
     private readonly IDataSerializer _dataSerializer;
-    private readonly BlakePasswordHasher _hasher = new();
+    private readonly IHashingService _hasher;
+    private readonly IMessageTemplateManager _messageTemplateManager;
     private readonly IAppLogger<FileManager> _logger;
     private readonly IStrategyValidator _strategyValidator;
 
@@ -91,34 +96,35 @@ public class FileManager : IFileManager
             _logger.LogError(Encoding.UTF8.GetString(errorBytes));
             return Result<DropBearFile>.Failure(errorMessage);
         }
-        
+
         // Messagepack serialization checks
         var headerOk = await _dataSerializer.IsMessagePackSerializable<FileHeader>().ConfigureAwait(false);
-        
+
         if (!headerOk.IsSuccess)
         {
             _logger.LogError("FileHeader is not serializable.");
             return Result<DropBearFile>.Failure("FileHeader is not serializable.");
         }
-        
+
         var metaDataOk = await _dataSerializer.IsMessagePackSerializable<FileMetaData>().ConfigureAwait(false);
-        
+
         if (!metaDataOk.IsSuccess)
         {
             _logger.LogError("FileMetaData is not serializable.");
             return Result<DropBearFile>.Failure("FileMetaData is not serializable.");
         }
-        
-        var compressionSettingsOk = await _dataSerializer.IsMessagePackSerializable<CompressionSettings>().ConfigureAwait(false);
-        
+
+        var compressionSettingsOk =
+            await _dataSerializer.IsMessagePackSerializable<CompressionSettings>().ConfigureAwait(false);
+
         if (!compressionSettingsOk.IsSuccess)
         {
             _logger.LogError("CompressionSettings is not serializable.");
             return Result<DropBearFile>.Failure("CompressionSettings is not serializable.");
         }
-        
+
         var contentOk = await _dataSerializer.IsMessagePackSerializable<FileContent>().ConfigureAwait(false);
-        
+
         if (!contentOk.IsSuccess)
         {
             _logger.LogError("FileContent is not serializable.");
@@ -342,7 +348,7 @@ public class FileManager : IFileManager
 
         // Read the content bytes excluding the appended hash
         var totalBytesRead = 0;
-        var bytesRead = 0;
+        int bytesRead;
         while (totalBytesRead < contentLength && (bytesRead = await fileStream
                    .ReadAsync(contentBytes.AsMemory(totalBytesRead, contentLength - totalBytesRead))
                    .ConfigureAwait(false)) > 0) totalBytesRead += bytesRead;
@@ -361,7 +367,7 @@ public class FileManager : IFileManager
 
     private byte[] ComputeHash(byte[] contentBytes)
     {
-        var result = _hasher.Base64EncodedHash(contentBytes);
+        var result = _hasher.EncodeToBase64Hash(contentBytes);
         return result.IsSuccess ? Encoding.UTF8.GetBytes(result.Value) : Array.Empty<byte>();
     }
 
@@ -481,7 +487,7 @@ public class FileManager : IFileManager
             _strategyValidator.RegisterStrategy(new FileMetaDataValidationStrategy());
             _strategyValidator.RegisterStrategy(new DropBearFileValidationStrategy());
 
-            MessageTemplateFactory.RegisterTemplates(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            _messageTemplateManager.RegisterTemplates(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 { "Test", "Test" }
             });

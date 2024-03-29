@@ -13,7 +13,7 @@ namespace DropBear.Codex.Files.Models.FileComponents;
 public class FileMetaData : FileComponentBase, IFileMetaData
 {
     private readonly List<ContentTypeInfo> _contentTypes = new();
-    private readonly BlakePasswordHasher _hasher = new();
+    private readonly Blake3HashingService _hasher = new();
     private readonly Dictionary<ContentTypeInfo, string> _verificationHashes = new();
 
     /// <summary>
@@ -78,7 +78,7 @@ public class FileMetaData : FileComponentBase, IFileMetaData
 
         foreach (var contentContainer in content.Contents)
         {
-            var hashResult = _hasher.Base64EncodedHash(contentContainer.Data);
+            var hashResult = _hasher.EncodeToBase64Hash(contentContainer.Data);
 
             if (hashResult.IsSuccess) _verificationHashes[contentContainer.ContentType] = hashResult.Value;
             // Consider handling failure case, possibly logging or throwing an exception

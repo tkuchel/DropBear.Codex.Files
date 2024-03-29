@@ -2,6 +2,7 @@
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Services;
 using DropBear.Codex.Serialization;
+using DropBear.Codex.Utilities.Extensions;
 using DropBear.Codex.Validation;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -32,5 +33,11 @@ public static class ServiceCollectionExtensions
 
         // Add file manager service
         services.AddTransient<IFileManager, FileManager>();
+
+        // Add hashing utilities
+        services.AddHashingUtilities();
+        
+        // Add MessageTemplateManager service
+        services.AddMessageTemplateManager();
     }
 }

@@ -1,5 +1,6 @@
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Utilities.Hashing;
+using DropBear.Codex.Utilities.Hashing.Interfaces;
 using MessagePack;
 
 namespace DropBear.Codex.Files.Models.FileComponents.SubComponents;
@@ -10,7 +11,7 @@ namespace DropBear.Codex.Files.Models.FileComponents.SubComponents;
 [MessagePackObject]
 public class ContentContainer : IContentContainer
 {
-    private readonly BlakePasswordHasher _blakePasswordHasher = new();
+    private readonly Blake3HashingService _blake3HashingService = new Blake3HashingService();
     private byte[] _data;
 
     /// <summary>
@@ -22,7 +23,7 @@ public class ContentContainer : IContentContainer
     {
         _data = data ?? throw new ArgumentNullException(nameof(data));
         ContentType = contentType ?? throw new ArgumentNullException(nameof(contentType));
-        VerificationHash = _blakePasswordHasher.Base64EncodedHash(_data).Value;
+        VerificationHash = _blake3HashingService.EncodeToBase64Hash(_data).Value;
     }
 
     /// <summary>
@@ -38,7 +39,7 @@ public class ContentContainer : IContentContainer
         {
             ArgumentNullException.ThrowIfNull(value);
             _data = value;
-            VerificationHash = _blakePasswordHasher.Base64EncodedHash(_data).Value; // Consider error handling here
+            VerificationHash = _blake3HashingService.EncodeToBase64Hash(_data).Value; // Consider error handling here
         }
     }
 

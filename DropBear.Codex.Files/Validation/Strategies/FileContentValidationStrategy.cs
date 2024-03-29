@@ -11,7 +11,7 @@ namespace DropBear.Codex.Files.Validation.Strategies;
 /// </summary>
 public class FileContentValidationStrategy : IValidationStrategy<FileContent>
 {
-    private readonly BlakePasswordHasher _hasher = new();
+    private readonly Blake3HashingService _hasher = new();
 
     /// <summary>
     ///     Validates the <see cref="FileContent" /> instance, focusing on the integrity and validity of its contents.
@@ -71,7 +71,7 @@ public class FileContentValidationStrategy : IValidationStrategy<FileContent>
     /// <returns>True if the computed hash matches the expected hash; otherwise, false.</returns>
     private bool IsHashMatching(byte[] data, string expectedHash)
     {
-        var hashResult = _hasher.Base64EncodedHash(data);
+        var hashResult = _hasher.EncodeToBase64Hash(data);
         if (!hashResult.IsSuccess)
             // Log the error or handle the failure to hash the data as needed
             return false;

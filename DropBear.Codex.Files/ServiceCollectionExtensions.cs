@@ -34,12 +34,9 @@ public static class ServiceCollectionExtensions
         services.AddDataSerializationServices();
 
         // Add file manager service
-        services.AddTransient<ICompressionSettings, CompressionSettings>();
-        services.AddTransient<IFileHeader, FileHeader>();
-        services.AddTransient<IFileMetaData, FileMetaData>();
-        services.AddTransient<IContentContainer, ContentContainer>();
-        services.AddTransient<IFileContent, FileContent>();
-        services.AddTransient<IFileManager, FileManager>();
+        services.AddSingleton<IContentContainerFactory, ContentContainerFactory>();
+        services.AddSingleton<IFileContentFactory, FileContentFactory>();
+        services.AddSingleton<IFileManager,FileManager>();
 
         // Add hashing utilities
         services.AddHashingUtilities();

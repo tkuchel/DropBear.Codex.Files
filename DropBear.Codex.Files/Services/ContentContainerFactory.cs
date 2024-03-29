@@ -9,9 +9,9 @@ public class ContentContainerFactory : IContentContainerFactory
     {
         var contentTypeInfo = new ContentTypeInfo
         {
-            AssemblyName = contentType.Assembly.GetName().Name,
+            AssemblyName = contentType.Assembly.GetName().Name ?? string.Empty,
             TypeName = contentType.Name,
-            Namespace = contentType.Namespace
+            Namespace = contentType.Namespace ?? string.Empty,
         };
 
         return new ContentContainer(data, contentTypeInfo);

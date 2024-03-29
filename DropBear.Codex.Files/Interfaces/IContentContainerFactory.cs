@@ -4,5 +4,5 @@ namespace DropBear.Codex.Files.Interfaces;
 
 public interface IContentContainerFactory
 {
-    IContentContainer Create(byte[] data, ContentTypeInfo contentType);
+    IContentContainer Create(byte[] data, Type contentType);
 }

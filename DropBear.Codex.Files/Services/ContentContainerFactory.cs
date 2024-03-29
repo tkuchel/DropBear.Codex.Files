@@ -5,9 +5,15 @@ namespace DropBear.Codex.Files.Services;
 
 public class ContentContainerFactory : IContentContainerFactory
 {
-    public IContentContainer Create(byte[] data, ContentTypeInfo contentType)
+    public IContentContainer Create(byte[] data, Type contentType)
     {
-        // Assuming ContentContainer is your IContentContainer implementation
-        return new ContentContainer(data, contentType);
+        var contentTypeInfo = new ContentTypeInfo
+        {
+            AssemblyName = contentType.Assembly.GetName().Name,
+            TypeName = contentType.Name,
+            Namespace = contentType.Namespace
+        };
+
+        return new ContentContainer(data, contentTypeInfo);
     }
 }

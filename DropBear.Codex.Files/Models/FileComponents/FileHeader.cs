@@ -14,6 +14,7 @@ public class FileHeader : FileComponentBase, IFileHeader
     /// <summary>
     ///     Initializes a new instance of the <see cref="FileHeader" /> class.
     /// </summary>
+    [SerializationConstructor]
     public FileHeader()
     {
         // Encode the Year, Month, and Day as bytes. Assuming the Year might need more than one byte.

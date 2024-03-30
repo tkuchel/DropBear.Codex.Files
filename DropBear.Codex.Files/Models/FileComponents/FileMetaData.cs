@@ -21,6 +21,7 @@ public class FileMetaData : FileComponentBase, IFileMetaData
     /// </summary>
     /// <param name="author">The author of the file.</param>
     /// <param name="content">The content of the file.</param>
+    [SerializationConstructor]
     public FileMetaData(string author, IFileContent content)
     {
         Author = author ?? throw new ArgumentNullException(nameof(author));

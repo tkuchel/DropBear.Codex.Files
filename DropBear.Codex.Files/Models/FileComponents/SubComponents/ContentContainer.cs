@@ -19,6 +19,7 @@ public class ContentContainer : IContentContainer
     /// </summary>
     /// <param name="data">The content data.</param>
     /// <param name="contentType">The content type information.</param>
+    [SerializationConstructor]
     public ContentContainer(byte[] data, ContentTypeInfo contentType)
     {
         _data = data ?? throw new ArgumentNullException(nameof(data));

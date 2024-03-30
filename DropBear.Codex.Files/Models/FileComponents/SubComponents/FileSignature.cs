@@ -1,10 +1,12 @@
 using System.Collections.ObjectModel;
+using MessagePack;
 
 namespace DropBear.Codex.Files.Models.FileComponents.SubComponents;
 
 /// <summary>
 ///     Represents a file signature.
 /// </summary>
+[MessagePackObject]
 public class FileSignature : IEquatable<FileSignature>
 {
     /// <summary>
@@ -15,6 +17,7 @@ public class FileSignature : IEquatable<FileSignature>
     /// <param name="extension">The file extension associated with the file signature.</param>
     /// <param name="headerLength">The length of the file signature header.</param>
     /// <param name="offset">The offset of the file signature within the file.</param>
+    [SerializationConstructor]
     public FileSignature(byte[] signature, string mediaType, string extension, int headerLength = 0, int offset = 0)
     {
         Signature = new ReadOnlyCollection<byte>(signature ??
@@ -31,26 +34,31 @@ public class FileSignature : IEquatable<FileSignature>
     /// <summary>
     ///     Gets the file signature bytes.
     /// </summary>
+    [Key(0)]
     public IReadOnlyList<byte> Signature { get; }
 
     /// <summary>
     ///     Gets the length of the file signature header.
     /// </summary>
+    [Key(1)]
     public int HeaderLength { get; }
 
     /// <summary>
     ///     Gets the file extension associated with the file signature.
     /// </summary>
+    [Key(2)]
     public string Extension { get; }
 
     /// <summary>
     ///     Gets the media type associated with the file signature.
     /// </summary>
+    [Key(3)]
     public string MediaType { get; }
 
     /// <summary>
     ///     Gets the offset of the file signature within the file.
     /// </summary>
+    [Key(4)]
     public int Offset { get; }
 
     /// <summary>

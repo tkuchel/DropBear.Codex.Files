@@ -18,6 +18,7 @@ public class DropBearFile : FileBase
     /// <param name="metaData">The metadata of the file.</param>
     /// <param name="compressionSettings">The compression settings of the file.</param>
     /// <param name="content">The content of the file.</param>
+    [SerializationConstructor]
     public DropBearFile(IFileMetaData metaData, ICompressionSettings compressionSettings, IFileContent content)
     {
         MetaData = metaData;

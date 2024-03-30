@@ -70,5 +70,16 @@ internal class Program
         {
             logger.LogError($"Failure at {DateTimeOffset.UtcNow} {fileData?.ErrorMessage}");
         }
+        
+        var readResult = await fileManager.ReadFileAsync(@"C:\Temp\TestData.dbf");
+        if (readResult.IsFailure)
+        {
+            logger.LogError($"Failure at {DateTimeOffset.UtcNow} {readResult.ErrorMessage}");
+            return;
+        }
+        
+        var readContent = readResult.Value;
+        var readContentContainer = readContent.GetContent<TestData>();
+        
     }
 }

@@ -211,11 +211,20 @@ public class FileManager : IFileManager
                 new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
             await using (fileStream.ConfigureAwait(false))
             {
-                // Read the file signature using LengthPrefixUtils
-                var fileSignatureBytes = LengthPrefixUtils.ReadLengthPrefixedBytes(fileStream);
+                // // Read the file signature using LengthPrefixUtils
+                // var fileSignatureBytes = LengthPrefixUtils.ReadLengthPrefixedBytes(fileStream);
+                //
+                // // Verify the file signature
+                // if (!IsValidFileSignature(fileSignatureBytes))
+                // {
+                //     _logger.LogError("Invalid file signature.");
+                //     return Result<DropBearFile>.Failure("Invalid file signature.");
+                // }
 
-                // Verify the file signature
-                if (!IsValidFileSignature(fileSignatureBytes))
+                var fileHeader = await ReadAndDeserializeHeaderAsync(fileStream).ConfigureAwait(false);
+
+                // Verify the file signature within the FileHeader
+                if (!IsValidFileSignature(fileHeader.FileSignature.Signature))
                 {
                     _logger.LogError("Invalid file signature.");
                     return Result<DropBearFile>.Failure("Invalid file signature.");
@@ -231,14 +240,14 @@ public class FileManager : IFileManager
                 }
 
                 // Assuming methods to read and deserialize each component
-                var header = await ReadAndDeserializeHeaderAsync(fileStream).ConfigureAwait(false);
+                //var header = await ReadAndDeserializeHeaderAsync(fileStream).ConfigureAwait(false);
                 var metaData = await ReadAndDeserializeMetaDataAsync(fileStream).ConfigureAwait(false);
                 var compressionSettings =
                     await ReadAndDeserializeCompressionSettingsAsync(fileStream).ConfigureAwait(false);
                 var content = await ReadAndDeserializeContentAsync(fileStream, compressionSettings)
                     .ConfigureAwait(false);
 
-                var reconstructedFile = DropBearFile.Reconstruct(header, metaData, compressionSettings, content);
+                var reconstructedFile = DropBearFile.Reconstruct(fileHeader, metaData, compressionSettings, content);
 
                 _logger.LogInformation($"File read successfully from {filePath}");
                 return Result<DropBearFile>.Success(reconstructedFile);
@@ -250,6 +259,7 @@ public class FileManager : IFileManager
             return Result<DropBearFile>.Failure("An error occurred while reading the file.");
         }
     }
+
 
     /// <summary>
     ///     Deletes the file at the specified file path.
@@ -346,8 +356,16 @@ public class FileManager : IFileManager
 
     #region Private Methods
 
-    private static bool IsValidFileSignature(IEnumerable<byte> signatureBytes) =>
-        signatureBytes.SequenceEqual(ExpectedSignatureBytes);
+    // Adjust IsValidFileSignature to accept the exact signature byte array
+    private static bool IsValidFileSignature(IEnumerable<byte> signatureBytes)
+    {
+        // Convert ExpectedSignatureBytes to IEnumerable<byte> for sequence comparison
+        // This assumes ExpectedSignatureBytes is originally a byte[]
+        IEnumerable<byte> expectedSignature = ExpectedSignatureBytes;
+
+        return signatureBytes.SequenceEqual(expectedSignature);
+    }
+
 
     private async Task<bool> VerifyAppendedHashAsync(Stream fileStream, IReadOnlyCollection<byte> appendedHash)
     {
@@ -385,12 +403,24 @@ public class FileManager : IFileManager
 
     private async Task<FileHeader> ReadAndDeserializeHeaderAsync(Stream fileStream)
     {
+        // Ensure the stream's position is at the beginning or at the correct offset.
+        fileStream.Position = 0;
+
         var headerBytes = LengthPrefixUtils.ReadLengthPrefixedBytes(fileStream);
+
+        // Optional: Log or inspect headerBytes to verify correctness before deserialization.
+    
         var header = await _dataSerializer
             .DeserializeMessagePackAsync<FileHeader>(headerBytes, CompressionOption.Compressed).ConfigureAwait(false);
-        if (header.IsFailure) throw new InvalidOperationException("Failed to deserialize FileHeader.");
+        
+        if (header.IsFailure)
+        {
+            throw new InvalidOperationException("Failed to deserialize FileHeader.");
+        }
+    
         return header.Value;
     }
+
 
     private async Task<FileMetaData> ReadAndDeserializeMetaDataAsync(Stream fileStream)
     {
@@ -441,7 +471,7 @@ public class FileManager : IFileManager
         try
         {
             var headerBytes = await _dataSerializer
-                .SerializeMessagePackAsync(file.Header, CompressionOption.Compressed, true).ConfigureAwait(false);
+                .SerializeMessagePackAsync(file.Header, CompressionOption.Compressed).ConfigureAwait(false);
             if (!headerBytes.IsSuccess) throw new InvalidOperationException("Failed to serialize the file header.");
             LengthPrefixUtils.WriteLengthPrefixedBytes(fileStream, headerBytes.Value);
 
@@ -485,7 +515,7 @@ public class FileManager : IFileManager
             var fileContentBytes = new byte[fileStream.Length];
 
             // Read the entire file content into the buffer
-            var bytesRead = await fileStream.ReadAsync(fileContentBytes, 0, fileContentBytes.Length)
+            var bytesRead = await fileStream.ReadAsync(fileContentBytes)
                 .ConfigureAwait(false);
             if (bytesRead != fileStream.Length) throw new IOException("Could not read the full content of the stream.");
 
@@ -496,7 +526,7 @@ public class FileManager : IFileManager
             // Write the computed hash to the end of the stream
             // This assumes the stream supports writing. Consider checking fileStream.CanWrite if necessary.
             var hashBytes = Encoding.UTF8.GetBytes(hashResult.Value);
-            await fileStream.WriteAsync(hashBytes, 0, hashBytes.Length).ConfigureAwait(false);
+            await fileStream.WriteAsync(hashBytes).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -504,7 +534,6 @@ public class FileManager : IFileManager
             throw;
         }
     }
-
 
     private Result InitializeFileManager()
     {

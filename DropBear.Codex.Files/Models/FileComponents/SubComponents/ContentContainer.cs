@@ -1,6 +1,5 @@
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Utilities.Hashing;
-using DropBear.Codex.Utilities.Hashing.Interfaces;
 using MessagePack;
 
 namespace DropBear.Codex.Files.Models.FileComponents.SubComponents;
@@ -11,8 +10,9 @@ namespace DropBear.Codex.Files.Models.FileComponents.SubComponents;
 [MessagePackObject]
 public class ContentContainer : IContentContainer
 {
-    private readonly Blake3HashingService _blake3HashingService = new Blake3HashingService();
-    private byte[] _data;
+    private readonly Blake3HashingService _blake3HashingService = new();
+
+    [Key(0)] private byte[] _data;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="ContentContainer" /> class.
@@ -24,24 +24,21 @@ public class ContentContainer : IContentContainer
     {
         _data = data ?? throw new ArgumentNullException(nameof(data));
         ContentType = contentType ?? throw new ArgumentNullException(nameof(contentType));
-        VerificationHash = _blake3HashingService.EncodeToBase64Hash(_data).Value;
     }
 
     /// <summary>
     ///     Gets or sets the content data.
     /// </summary>
-    [Key(0)]
-#pragma warning disable CA1819
-    public byte[] Data
-#pragma warning restore CA1819
+    public byte[] GetData() => _data;
+
+    /// <summary>
+    ///     Gets or sets the content data.
+    /// </summary>
+    public void SetData(byte[] value)
     {
-        get => _data;
-        private set
-        {
-            ArgumentNullException.ThrowIfNull(value);
-            _data = value;
-            VerificationHash = _blake3HashingService.EncodeToBase64Hash(_data).Value; // Consider error handling here
-        }
+        _data = value ?? throw new ArgumentNullException(nameof(value), "Data cannot be null.");
+        VerificationHash =
+            _blake3HashingService.EncodeToBase64Hash(_data).Value; // Recalculate hash on data update.
     }
 
     /// <summary>
@@ -54,11 +51,11 @@ public class ContentContainer : IContentContainer
     ///     Gets the content length.
     /// </summary>
     [IgnoreMember]
-    public long ContentLength => Data.Length;
+    public long ContentLength => GetData().Length;
 
     /// <summary>
-    ///     Gets or sets the verification hash of the content.
+    ///     Gets the verification hash of the content.
     /// </summary>
     [Key(2)]
-    public string VerificationHash { get; private set; }
+    public string VerificationHash { get; private set; } = string.Empty;
 }

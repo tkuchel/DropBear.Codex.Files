@@ -10,6 +10,11 @@ namespace DropBear.Codex.Files.Models.FileComponents;
 [MessagePackObject]
 public class CompressionSettings : FileComponentBase, ICompressionSettings
 {
+    [SerializationConstructor]
+    public CompressionSettings()
+    {
+        
+    }
     /// <summary>
     ///     Initializes a new instance of the <see cref="CompressionSettings" /> class with the specified compression settings.
     /// </summary>

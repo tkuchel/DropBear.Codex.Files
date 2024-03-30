@@ -8,6 +8,12 @@ namespace DropBear.Codex.Files.Models.FileComponents.SubComponents;
 [MessagePackObject]
 public class ContentTypeInfo
 {
+    [SerializationConstructor]
+    public ContentTypeInfo()
+    {
+        
+    }
+    
     /// <summary>
     ///     Gets or sets the name of the assembly.
     /// </summary>

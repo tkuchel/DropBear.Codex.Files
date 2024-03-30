@@ -9,21 +9,11 @@ namespace DropBear.Codex.Files.Models.FileComponents.SubComponents;
 [MessagePackObject]
 public class FileSignature : IEquatable<FileSignature>
 {
-    /// <summary>
-    ///     Initializes a new instance of the <see cref="FileSignature" /> class.
-    /// </summary>
-    /// <param name="signature">The file signature bytes.</param>
-    /// <param name="mediaType">The media type associated with the file signature.</param>
-    /// <param name="extension">The file extension associated with the file signature.</param>
-    /// <param name="headerLength">The length of the file signature header.</param>
-    /// <param name="offset">The offset of the file signature within the file.</param>
-    [SerializationConstructor]
     public FileSignature(byte[] signature, string mediaType, string extension, int headerLength = 0, int offset = 0)
     {
-        Signature = new ReadOnlyCollection<byte>(signature ??
-                                                 throw new ArgumentNullException(nameof(signature),
-                                                     "Signature cannot be null."));
-        HeaderLength = headerLength == 0 ? Signature.Count : headerLength;
+        if (signature == null) throw new ArgumentNullException(nameof(signature), "Signature cannot be null.");
+        SignatureSerialization = new List<byte>(signature);
+        HeaderLength = headerLength == 0 ? SignatureSerialization.Count : headerLength;
         Extension = extension ?? throw new ArgumentNullException(nameof(extension), "Extension cannot be null.");
         MediaType = !string.IsNullOrEmpty(mediaType)
             ? mediaType
@@ -31,35 +21,22 @@ public class FileSignature : IEquatable<FileSignature>
         Offset = offset;
     }
 
-    /// <summary>
-    ///     Gets the file signature bytes.
-    /// </summary>
-    [Key(0)]
-    public IReadOnlyList<byte> Signature { get; }
+    // Use a mutable list for serialization. Do not expose this directly.
+    [Key(0)] private List<byte> SignatureSerialization { get; }
 
     /// <summary>
-    ///     Gets the length of the file signature header.
+    ///     Gets the file signature bytes as a read-only collection.
     /// </summary>
-    [Key(1)]
-    public int HeaderLength { get; }
+    public IReadOnlyList<byte> Signature => new ReadOnlyCollection<byte>(SignatureSerialization);
 
-    /// <summary>
-    ///     Gets the file extension associated with the file signature.
-    /// </summary>
-    [Key(2)]
-    public string Extension { get; }
+    [Key(1)] public int HeaderLength { get; }
 
-    /// <summary>
-    ///     Gets the media type associated with the file signature.
-    /// </summary>
-    [Key(3)]
-    public string MediaType { get; }
+    [Key(2)] public string Extension { get; }
 
-    /// <summary>
-    ///     Gets the offset of the file signature within the file.
-    /// </summary>
-    [Key(4)]
-    public int Offset { get; }
+    [Key(3)] public string MediaType { get; }
+
+    [Key(4)] public int Offset { get; }
+
 
     /// <summary>
     ///     Determines whether the specified object is equal to the current file signature.

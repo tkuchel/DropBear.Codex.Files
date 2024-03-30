@@ -3,29 +3,35 @@ using DropBear.Codex.Files.Models.FileComponents.SubComponents;
 namespace DropBear.Codex.Files.Interfaces;
 
 /// <summary>
-///     Interface representing a content container.
+///     Represents the operations for managing and accessing the contents of a content container.
 /// </summary>
 public interface IContentContainer
 {
     /// <summary>
-    ///     Gets the data stored in the content container.
+    ///     Gets or sets the binary data of the content.
     /// </summary>
-#pragma warning disable CA1819
-    byte[] Data { get; }
-#pragma warning restore CA1819
+    /// <exception cref="ArgumentNullException">Thrown when attempting to set the data to null.</exception>
+    byte[] GetData();
 
     /// <summary>
-    ///     Gets the content type information of the content container.
+    ///     Gets or sets the binary data of the content.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">Thrown when attempting to set the data to null.</exception>
+    void SetData(byte[] value);
+
+    /// <summary>
+    ///     Gets the information describing the type of the content.
     /// </summary>
     ContentTypeInfo ContentType { get; }
 
     /// <summary>
-    ///     Gets the length of the content data.
+    ///     Gets the total length of the content data in bytes.
     /// </summary>
-    long ContentLength => Data.Length;
+    long ContentLength { get; }
 
     /// <summary>
-    ///     Gets the verification hash of the content container.
+    ///     Gets the verification hash for the content data. This hash is used to verify
+    ///     the integrity of the content data.
     /// </summary>
     string VerificationHash { get; }
 }

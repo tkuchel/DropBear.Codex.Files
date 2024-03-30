@@ -1,7 +1,5 @@
 ﻿using DropBear.Codex.AppLogger.Extensions;
 using DropBear.Codex.Files.Interfaces;
-using DropBear.Codex.Files.Models.FileComponents;
-using DropBear.Codex.Files.Models.FileComponents.SubComponents;
 using DropBear.Codex.Files.Services;
 using DropBear.Codex.Serialization;
 using DropBear.Codex.Utilities.Extensions;
@@ -36,11 +34,11 @@ public static class ServiceCollectionExtensions
         // Add file manager service
         services.AddSingleton<IContentContainerFactory, ContentContainerFactory>();
         services.AddSingleton<IFileContentFactory, FileContentFactory>();
-        services.AddSingleton<IFileManager,FileManager>();
+        services.AddSingleton<IFileManager, FileManager>();
 
         // Add hashing utilities
         services.AddHashingUtilities();
-        
+
         // Add MessageTemplateManager service
         services.AddMessageTemplateManager();
     }

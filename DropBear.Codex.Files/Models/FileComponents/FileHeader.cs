@@ -42,7 +42,7 @@ public class FileHeader : FileComponentBase, IFileHeader
     ///     Gets the version of the file header.
     /// </summary>
     [Key(0)]
-    public Version Version { get; } = new(2024, 3, 1);
+    public FileHeaderVersion Version { get; } = new(2024, 3, 1);
 
     /// <summary>
     ///     Gets the signature of the file header.

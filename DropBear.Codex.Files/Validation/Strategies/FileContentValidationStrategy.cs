@@ -50,7 +50,7 @@ public class FileContentValidationStrategy : IValidationStrategy<FileContent>
     private void ValidateContentContainer(IContentContainer content, int index, Dictionary<string, string> errors)
     {
         // Validate the data is not null or empty
-        if (content.Data.Length is 0)
+        if (content.GetData().Length is 0)
             errors.Add($"Data-{index}", $"Content at index {index} has null or empty data.");
 
         // Validate the content type is valid
@@ -58,7 +58,7 @@ public class FileContentValidationStrategy : IValidationStrategy<FileContent>
             errors.Add($"ContentType-{index}", $"Content at index {index} has an invalid content type.");
 
         // Additional validation: Match the verification hash with the data
-        if (!IsHashMatching(content.Data, content.VerificationHash))
+        if (!IsHashMatching(content.GetData(), content.VerificationHash))
             errors.Add($"VerificationHashMismatch-{index}",
                 $"The verification hash does not match the data at index {index}.");
     }

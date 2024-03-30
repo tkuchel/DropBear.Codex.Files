@@ -4,6 +4,8 @@ using DropBear.Codex.Core.ReturnTypes;
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Models;
 using DropBear.Codex.Files.Models.FileComponents;
+using DropBear.Codex.Files.Models.FileComponents.SubComponents;
+using DropBear.Codex.Files.PreflightTasks;
 using DropBear.Codex.Files.Utils;
 using DropBear.Codex.Files.Validation.Strategies;
 using DropBear.Codex.Serialization.Enums;
@@ -40,6 +42,12 @@ public class FileManager : IFileManager
         _hasher = hasher;
         _messageTemplateManager = messageTemplateManager;
 
+
+        Init();
+    }
+
+    private void Init()
+    {
         var initializationResult = InitializeFileManager();
         if (initializationResult.IsFailure) _logger.LogError(initializationResult.ErrorMessage);
     }
@@ -425,29 +433,37 @@ public class FileManager : IFileManager
     /// <exception cref="InvalidOperationException">Thrown if any component fails to serialize.</exception>
     private async Task WriteComponentsToFileStreamAsync(Stream fileStream, DropBearFile file)
     {
-        var headerBytes = await _dataSerializer
-            .SerializeMessagePackAsync(file.Header, CompressionOption.Compressed).ConfigureAwait(false);
-        if (!headerBytes.IsSuccess) throw new InvalidOperationException("Failed to serialize the file header.");
-        LengthPrefixUtils.WriteLengthPrefixedBytes(fileStream, headerBytes.Value);
+        try
+        {
+            var headerBytes = await _dataSerializer
+                .SerializeMessagePackAsync(file.Header, CompressionOption.Compressed).ConfigureAwait(false);
+            if (!headerBytes.IsSuccess) throw new InvalidOperationException("Failed to serialize the file header.");
+            LengthPrefixUtils.WriteLengthPrefixedBytes(fileStream, headerBytes.Value);
 
-        var metaDataBytes = await _dataSerializer
-            .SerializeMessagePackAsync(file.MetaData, CompressionOption.Compressed).ConfigureAwait(false);
-        if (!metaDataBytes.IsSuccess) throw new InvalidOperationException("Failed to serialize the file metadata.");
-        LengthPrefixUtils.WriteLengthPrefixedBytes(fileStream, metaDataBytes.Value);
+            var metaDataBytes = await _dataSerializer
+                .SerializeMessagePackAsync(file.MetaData, CompressionOption.Compressed).ConfigureAwait(false);
+            if (!metaDataBytes.IsSuccess) throw new InvalidOperationException("Failed to serialize the file metadata.");
+            LengthPrefixUtils.WriteLengthPrefixedBytes(fileStream, metaDataBytes.Value);
 
-        var compressionSettingsBytes = await _dataSerializer
-            .SerializeMessagePackAsync(file.CompressionSettings, CompressionOption.Compressed)
-            .ConfigureAwait(false);
-        if (!compressionSettingsBytes.IsSuccess)
-            throw new InvalidOperationException("Failed to serialize the compression settings.");
-        LengthPrefixUtils.WriteLengthPrefixedBytes(fileStream, compressionSettingsBytes.Value);
+            var compressionSettingsBytes = await _dataSerializer
+                .SerializeMessagePackAsync(file.CompressionSettings, CompressionOption.Compressed)
+                .ConfigureAwait(false);
+            if (!compressionSettingsBytes.IsSuccess)
+                throw new InvalidOperationException("Failed to serialize the compression settings.");
+            LengthPrefixUtils.WriteLengthPrefixedBytes(fileStream, compressionSettingsBytes.Value);
 
-        var contentBytes = await _dataSerializer
-            .SerializeMessagePackAsync(file.Content,
-                file.CompressionSettings.IsCompressed ? CompressionOption.Compressed : CompressionOption.None)
-            .ConfigureAwait(false);
-        if (!contentBytes.IsSuccess) throw new InvalidOperationException("Failed to serialize the file content.");
-        LengthPrefixUtils.WriteLengthPrefixedBytes(fileStream, contentBytes.Value);
+            var contentBytes = await _dataSerializer
+                .SerializeMessagePackAsync(file.Content,
+                    file.CompressionSettings.IsCompressed ? CompressionOption.Compressed : CompressionOption.None)
+                .ConfigureAwait(false);
+            if (!contentBytes.IsSuccess) throw new InvalidOperationException("Failed to serialize the file content.");
+            LengthPrefixUtils.WriteLengthPrefixedBytes(fileStream, contentBytes.Value);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to write the components to the file stream.");
+            throw;
+        }
     }
 
     private async Task AppendVerificationHashAsync(Stream fileStream)
@@ -480,17 +496,57 @@ public class FileManager : IFileManager
     {
         try
         {
+            _logger.LogInformation("Initializing FileManager.");
+            
+            // Register validation strategies
+            _logger.LogInformation("Registering validation strategies.");
             _strategyValidator.RegisterStrategy(new CompressionSettingsValidationStrategy());
             _strategyValidator.RegisterStrategy(new FileContentValidationStrategy());
             _strategyValidator.RegisterStrategy(new FileHeaderValidationStrategy());
             _strategyValidator.RegisterStrategy(new FileMetaDataValidationStrategy());
             _strategyValidator.RegisterStrategy(new DropBearFileValidationStrategy());
+            _logger.LogInformation("Validation strategies registered successfully.");
 
+            // Register message templates
+            _logger.LogInformation("Registering message templates.");
             _messageTemplateManager.RegisterTemplates(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 { "Test", "Test" }
             });
+            _logger.LogInformation("Message templates registered successfully.");
 
+            // Perform type checking logic here
+            _logger.LogInformation("Checking type compatibility.");
+            var typesToCheck = new List<Type>
+            {
+                typeof(ContentContainer),
+                typeof(ContentTypeInfo),
+                typeof(FileSignature),
+                typeof(CompressionSettings),
+                typeof(FileContent),
+                typeof(FileHeader),
+                typeof(FileMetaData),
+                typeof(DropBearFile),
+                // typeof(IContentContainer),
+                // typeof(ICompressionSettings),
+                // typeof(IFileContent),
+                // typeof(IFileHeader),
+                // typeof(IFileMetaData),
+            };
+            var results = MessagePackCompatibilityAggregator.CheckTypes(typesToCheck);
+            _logger.LogInformation("Type compatibility check completed.");
+
+            if (results.FailedTypes.Count is not 0)
+            {
+                foreach (var (type, reason) in results.FailedTypes)
+                {
+                    _logger.LogError($"Type {type} failed compatibility check: {reason}"); 
+                }
+                
+                return Result.Failure("Type compatibility check failed.");
+            }
+               
+            _logger.LogInformation("FileManager initialized successfully.");
             return Result.Success();
         }
         catch (Exception ex)

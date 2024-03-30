@@ -162,7 +162,6 @@ public class FileManager : IFileManager
             {
                 await WriteComponentsToFileStreamAsync(fileStream, file).ConfigureAwait(false);
                 await AppendVerificationHashAsync(fileStream).ConfigureAwait(false);
-
                 _logger.LogInformation($"File written successfully to {filePath}");
                 return Result.Success();
             }
@@ -170,7 +169,7 @@ public class FileManager : IFileManager
         catch (Exception ex)
         {
             _logger.LogError(ex, $"Failed to write the file to {filePath}");
-            return Result.Failure("An error occurred while writing the file.");
+            return Result.Failure($"An error occurred while writing the file. {ex.Message}");
         }
     }
 

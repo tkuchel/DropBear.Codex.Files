@@ -1,5 +1,4 @@
 using DropBear.Codex.Files.Interfaces;
-using DropBear.Codex.Files.Models.Bases;
 using DropBear.Codex.Files.Models.FileComponents.SubComponents;
 using DropBear.Codex.Utilities.Hashing;
 using MessagePack;
@@ -7,39 +6,48 @@ using MessagePack;
 namespace DropBear.Codex.Files.Models.FileComponents;
 
 [MessagePackObject]
-public class FileMetaData : FileComponentBase, IFileMetaData
+public class FileMetaData : IFileMetaData
 {
     private readonly Blake3HashingService _hasher = new();
 
+    // Default constructor for MessagePack deserialization
     [SerializationConstructor]
-    public FileMetaData(string author, IFileContent content)
+    public FileMetaData()
+    {
+    }
+
+    // Use this constructor for manual object creation
+    public FileMetaData(string author, IFileContent content) : this()
     {
         Author = author ?? throw new ArgumentNullException(nameof(author));
         ArgumentNullException.ThrowIfNull(content);
-
-        // Populate the private collections
-        ContentTypesSerialization.AddRange(content.Contents.Select(c => c.ContentType));
-        UpdateVerificationHashes(content);
+        InitializeFromContent(content);
     }
 
-    // Use private mutable collection for serialization
-    [Key(4)] private List<ContentTypeInfo> ContentTypesSerialization { get; } = new();
+    [Key(3)] public string Author { get; private set; }
 
-    // Use private mutable dictionary for serialization
-    [Key(0)] private Dictionary<ContentTypeInfo, string> VerificationHashesSerialization { get; } = new();
+    [Key(4)] private List<ContentTypeInfo> ContentTypesSerialization { get; set; } = new();
 
+    [Key(0)] private Dictionary<ContentTypeInfo, string> VerificationHashesSerialization { get; set; } = new();
+
+    [IgnoreMember]
     public IReadOnlyDictionary<ContentTypeInfo, string> VerificationHashes => VerificationHashesSerialization;
 
-    [Key(1)] public DateTimeOffset Created { get; } = DateTimeOffset.UtcNow;
+    [Key(1)] public DateTimeOffset Created { get; private set; } = DateTimeOffset.UtcNow;
 
     [Key(2)] public DateTimeOffset LastModified { get; private set; } = DateTimeOffset.UtcNow;
 
-    [Key(3)] public string Author { get; }
-
+    [IgnoreMember]
     public IReadOnlyCollection<ContentTypeInfo> ExpectedContentTypes => ContentTypesSerialization.AsReadOnly();
 
     public void UpdateLastModified() => LastModified = DateTimeOffset.UtcNow;
 
+    private void InitializeFromContent(IFileContent content)
+    {
+        // Populate the private collections from the content parameter
+        ContentTypesSerialization.AddRange(content.Contents.Select(c => c.ContentType));
+        UpdateVerificationHashes(content);
+    }
     private void UpdateVerificationHashes(IFileContent content)
     {
         VerificationHashesSerialization.Clear();

@@ -1,5 +1,4 @@
 using DropBear.Codex.Files.Interfaces;
-using DropBear.Codex.Files.Models.Bases;
 using DropBear.Codex.Files.Models.FileComponents;
 using MessagePack;
 
@@ -9,7 +8,7 @@ namespace DropBear.Codex.Files.Models;
 ///     Represents a DropBear file with metadata, compression settings, and content.
 /// </summary>
 [MessagePackObject]
-public class DropBearFile : FileBase
+public class DropBearFile
 {
     /// <summary>
     ///     Initializes a new instance of the <see cref="DropBearFile" /> class with the specified metadata, compression

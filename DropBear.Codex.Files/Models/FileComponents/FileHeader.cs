@@ -1,5 +1,4 @@
 using DropBear.Codex.Files.Interfaces;
-using DropBear.Codex.Files.Models.Bases;
 using DropBear.Codex.Files.Models.FileComponents.SubComponents;
 using MessagePack;
 
@@ -9,7 +8,7 @@ namespace DropBear.Codex.Files.Models.FileComponents;
 ///     Represents the header of a file.
 /// </summary>
 [MessagePackObject]
-public class FileHeader : FileComponentBase, IFileHeader
+public class FileHeader : IFileHeader
 {
     /// <summary>
     ///     Initializes a new instance of the <see cref="FileHeader" /> class.

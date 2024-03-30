@@ -165,19 +165,24 @@ public class FileManager : IFileManager
 
         try
         {
-            var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true);
+            var fileStream = new FileStream(filePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 4096,
+                true);
             await using (fileStream.ConfigureAwait(false))
             {
+                // Your existing write operations...
                 await WriteComponentsToFileStreamAsync(fileStream, file).ConfigureAwait(false);
+
+                // Now this should succeed, as the stream supports reading.
                 await AppendVerificationHashAsync(fileStream).ConfigureAwait(false);
-                _logger.LogInformation($"File written successfully to {filePath}");
+
+                _logger.LogInformation($"File written and verified successfully at {filePath}");
                 return Result.Success();
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"Failed to write the file to {filePath}");
-            return Result.Failure($"An error occurred while writing the file. {ex.Message}");
+            _logger.LogError(ex, $"Failed to write the file at {filePath}");
+            return Result.Failure($"An error occurred while writing the file: {ex.Message}");
         }
     }
 
@@ -436,7 +441,7 @@ public class FileManager : IFileManager
         try
         {
             var headerBytes = await _dataSerializer
-                .SerializeMessagePackAsync(file.Header, CompressionOption.Compressed).ConfigureAwait(false);
+                .SerializeMessagePackAsync(file.Header, CompressionOption.Compressed, true).ConfigureAwait(false);
             if (!headerBytes.IsSuccess) throw new InvalidOperationException("Failed to serialize the file header.");
             LengthPrefixUtils.WriteLengthPrefixedBytes(fileStream, headerBytes.Value);
 
@@ -468,36 +473,45 @@ public class FileManager : IFileManager
 
     private async Task AppendVerificationHashAsync(Stream fileStream)
     {
-        // Reset the stream position to compute the hash of its entire content
-        fileStream.Position = 0;
+        if (!fileStream.CanRead) throw new NotSupportedException("The provided stream does not support reading.");
+        if (!fileStream.CanSeek) throw new NotSupportedException("The provided stream does not support seeking.");
 
-        // Initialize a buffer to hold the file content
-        var fileContentBytes = new byte[fileStream.Length];
-
-        // Read the entire file content into the buffer
-        var totalBytesRead = 0;
-        while (totalBytesRead < fileStream.Length)
+        try
         {
-            var bytesRead = await fileStream.ReadAsync(fileContentBytes.AsMemory(totalBytesRead)).ConfigureAwait(false);
-            if (bytesRead is 0)
-                // End of stream reached unexpectedly
-                throw new EndOfStreamException("Could not read the full content of the stream.");
-            totalBytesRead += bytesRead;
+            // Ensure the stream position is reset to the beginning for reading
+            fileStream.Position = 0;
+
+            // Initialize a buffer to hold the file content
+            var fileContentBytes = new byte[fileStream.Length];
+
+            // Read the entire file content into the buffer
+            var bytesRead = await fileStream.ReadAsync(fileContentBytes, 0, fileContentBytes.Length)
+                .ConfigureAwait(false);
+            if (bytesRead != fileStream.Length) throw new IOException("Could not read the full content of the stream.");
+
+            // Compute the hash of the file content
+            var hashResult = _hasher.EncodeToBase64Hash(fileContentBytes);
+            if (!hashResult.IsSuccess) throw new InvalidOperationException("Failed to compute the file content hash.");
+
+            // Write the computed hash to the end of the stream
+            // This assumes the stream supports writing. Consider checking fileStream.CanWrite if necessary.
+            var hashBytes = Encoding.UTF8.GetBytes(hashResult.Value);
+            await fileStream.WriteAsync(hashBytes, 0, hashBytes.Length).ConfigureAwait(false);
         }
-
-        // Compute the hash of the file content
-        var hash = ComputeHash(fileContentBytes);
-
-        // Write the computed hash to the stream using length-prefixed bytes
-        LengthPrefixUtils.WriteLengthPrefixedBytes(fileStream, hash);
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to append the verification hash to the file stream.");
+            throw;
+        }
     }
+
 
     private Result InitializeFileManager()
     {
         try
         {
             _logger.LogInformation("Initializing FileManager.");
-            
+
             // Register validation strategies
             _logger.LogInformation("Registering validation strategies.");
             _strategyValidator.RegisterStrategy(new CompressionSettingsValidationStrategy());
@@ -526,7 +540,7 @@ public class FileManager : IFileManager
                 typeof(FileContent),
                 typeof(FileHeader),
                 typeof(FileMetaData),
-                typeof(DropBearFile),
+                typeof(DropBearFile)
                 // typeof(IContentContainer),
                 // typeof(ICompressionSettings),
                 // typeof(IFileContent),
@@ -539,13 +553,11 @@ public class FileManager : IFileManager
             if (results.FailedTypes.Count is not 0)
             {
                 foreach (var (type, reason) in results.FailedTypes)
-                {
-                    _logger.LogError($"Type {type} failed compatibility check: {reason}"); 
-                }
-                
-                return Result.Failure("Type compatibility check failed.");
+                    _logger.LogError($"Type {type} failed compatibility check: {reason}");
+
+                return Result.Failure($"Type compatibility check failed with {results.FailedTypes.Count} failures.");
             }
-               
+
             _logger.LogInformation("FileManager initialized successfully.");
             return Result.Success();
         }

@@ -5,6 +5,7 @@ namespace DropBear.Codex.Files.Interfaces;
 /// <summary>
 ///     Represents the operations for managing and accessing the contents of a content container.
 /// </summary>
+[MessagePack.Union(0, typeof(ContentContainer))]
 public interface IContentContainer
 {
     /// <summary>

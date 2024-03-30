@@ -4,39 +4,39 @@ using MessagePack;
 namespace DropBear.Codex.Files.Models.FileComponents.SubComponents;
 
 /// <summary>
-///     Represents a file signature.
+/// Represents a file signature.
 /// </summary>
 [MessagePackObject]
 public class FileSignature : IEquatable<FileSignature>
 {
+    // This constructor is necessary for MessagePack deserialization.
+    // Ensure it's empty or initializes properties with default values.
+    [SerializationConstructor]
+    public FileSignature() { }
+
     public FileSignature(byte[] signature, string mediaType, string extension, int headerLength = 0, int offset = 0)
     {
-        if (signature == null) throw new ArgumentNullException(nameof(signature), "Signature cannot be null.");
-        SignatureSerialization = new List<byte>(signature);
-        HeaderLength = headerLength == 0 ? SignatureSerialization.Count : headerLength;
+        Signature = new ReadOnlyCollection<byte>(signature ?? throw new ArgumentNullException(nameof(signature), "Signature cannot be null."));
+        HeaderLength = headerLength == 0 ? Signature.Count : headerLength;
         Extension = extension ?? throw new ArgumentNullException(nameof(extension), "Extension cannot be null.");
-        MediaType = !string.IsNullOrEmpty(mediaType)
-            ? mediaType
-            : throw new ArgumentNullException(nameof(mediaType), "MediaType cannot be null or empty.");
+        MediaType = !string.IsNullOrEmpty(mediaType) ? mediaType : throw new ArgumentNullException(nameof(mediaType), "MediaType cannot be null or empty.");
         Offset = offset;
     }
 
-    // Use a mutable list for serialization. Do not expose this directly.
-    [Key(0)] private List<byte> SignatureSerialization { get; }
+    [Key(0)]
+    public ReadOnlyCollection<byte> Signature { get; private set; }
 
-    /// <summary>
-    ///     Gets the file signature bytes as a read-only collection.
-    /// </summary>
-    public IReadOnlyList<byte> Signature => new ReadOnlyCollection<byte>(SignatureSerialization);
+    [Key(1)]
+    public int HeaderLength { get; private set; }
 
-    [Key(1)] public int HeaderLength { get; }
+    [Key(2)]
+    public string Extension { get; private set; }
 
-    [Key(2)] public string Extension { get; }
+    [Key(3)]
+    public string MediaType { get; private set; }
 
-    [Key(3)] public string MediaType { get; }
-
-    [Key(4)] public int Offset { get; }
-
+    [Key(4)]
+    public int Offset { get; private set; }
 
     /// <summary>
     ///     Determines whether the specified object is equal to the current file signature.

@@ -1,5 +1,4 @@
 using DropBear.Codex.Files.Interfaces;
-using DropBear.Codex.Files.Models.Bases;
 using MessagePack;
 
 namespace DropBear.Codex.Files.Models.FileComponents;
@@ -8,13 +7,13 @@ namespace DropBear.Codex.Files.Models.FileComponents;
 ///     Represents compression settings for file operations.
 /// </summary>
 [MessagePackObject]
-public class CompressionSettings : FileComponentBase, ICompressionSettings
+public class CompressionSettings : ICompressionSettings
 {
     [SerializationConstructor]
     public CompressionSettings()
     {
-        
     }
+
     /// <summary>
     ///     Initializes a new instance of the <see cref="CompressionSettings" /> class with the specified compression settings.
     /// </summary>

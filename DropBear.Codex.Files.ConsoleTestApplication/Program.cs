@@ -10,6 +10,7 @@ using DropBear.Codex.Serialization.Enums;
 using DropBear.Codex.Serialization.Interfaces;
 using DropBear.Codex.Utilities.Helpers;
 using Microsoft.Extensions.DependencyInjection;
+using ServiceStack.Text;
 
 namespace DropBear.Codex.Files.ConsoleTestApplication;
 
@@ -96,6 +97,10 @@ internal class Program
         }
 
         var deserializedFileHeader = deserializeResult.Value;
+        
+        // Optional: Log the deserialized object for debugging
+        logger.LogInformation($"Deserialized header version object: {deserializedFileHeader.Version.Dump()}");
+        logger.LogInformation($"Original file header version object: {originalFileHeader.Version.Dump()}");
 
         // Step 4: Verify the deserialized object
         // This step depends on what properties your FileHeader class has.

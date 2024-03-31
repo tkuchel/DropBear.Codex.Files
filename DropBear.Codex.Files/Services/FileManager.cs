@@ -162,6 +162,17 @@ public class FileManager : IFileManager
             _logger.LogError("File path is invalid or the directory does not exist.");
             return Result.Failure("File path is invalid or the directory does not exist.");
         }
+        
+        // Check if file already exists and delete if it does.
+        if (File.Exists(filePath))
+        {
+            var deleteResult = DeleteFile(filePath);
+            if (deleteResult.IsFailure)
+            {
+                _logger.LogError("Failed to delete the existing file.");
+                return Result.Failure("Failed to delete the existing file.");
+            }
+        }
 
         try
         {

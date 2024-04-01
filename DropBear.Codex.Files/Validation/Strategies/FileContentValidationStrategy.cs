@@ -1,5 +1,5 @@
-using DropBear.Codex.Files.Interfaces;
-using DropBear.Codex.Files.Models.FileComponents;
+using DropBear.Codex.Files.Models.FileComponents.MainComponents;
+using DropBear.Codex.Files.Models.FileComponents.SubComponents;
 using DropBear.Codex.Utilities.Hashing;
 using DropBear.Codex.Validation.ReturnTypes;
 using DropBear.Codex.Validation.StrategyValidation.Interfaces;
@@ -47,10 +47,10 @@ public class FileContentValidationStrategy : IValidationStrategy<FileContent>
     /// <param name="content">The content container to validate.</param>
     /// <param name="index">The index of the content container within the FileContent's contents collection.</param>
     /// <param name="errors">A collection to which any validation errors should be added.</param>
-    private void ValidateContentContainer(IContentContainer content, int index, Dictionary<string, string> errors)
+    private void ValidateContentContainer(ContentContainer content, int index, Dictionary<string, string> errors)
     {
         // Validate the data is not null or empty
-        if (content.GetData().Length is 0)
+        if (content.Content.Length is 0)
             errors.Add($"Data-{index}", $"Content at index {index} has null or empty data.");
 
         // Validate the content type is valid
@@ -58,7 +58,7 @@ public class FileContentValidationStrategy : IValidationStrategy<FileContent>
             errors.Add($"ContentType-{index}", $"Content at index {index} has an invalid content type.");
 
         // Additional validation: Match the verification hash with the data
-        if (!IsHashMatching(content.GetData(), content.VerificationHash))
+        if (!IsHashMatching(content.Content, content.Hash))
             errors.Add($"VerificationHashMismatch-{index}",
                 $"The verification hash does not match the data at index {index}.");
     }

@@ -1,7 +1,6 @@
 ﻿using DropBear.Codex.AppLogger.Extensions;
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Services;
-using DropBear.Codex.Serialization;
 using DropBear.Codex.Utilities.Extensions;
 using DropBear.Codex.Validation;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,16 +27,8 @@ public static class ServiceCollectionExtensions
         // Add validation services
         services.AddValidationServices();
 
-        // Add data serialization services
-        services.AddDataSerializationServices();
-
         // Add file manager service
-        services.AddSingleton<IContentContainerFactory, ContentContainerFactory>();
-        services.AddSingleton<IFileContentFactory, FileContentFactory>();
         services.AddSingleton<IFileManager, FileManager>();
-
-        // Add hashing utilities
-        services.AddHashingUtilities();
 
         // Add MessageTemplateManager service
         services.AddMessageTemplateManager();

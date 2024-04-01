@@ -1,4 +1,4 @@
-using DropBear.Codex.Files.Models.FileComponents;
+using DropBear.Codex.Files.Models.FileComponents.MainComponents;
 using DropBear.Codex.Files.Models.FileComponents.SubComponents;
 using DropBear.Codex.Validation.ReturnTypes;
 using DropBear.Codex.Validation.StrategyValidation.Interfaces;
@@ -20,9 +20,9 @@ public class FileHeaderValidationStrategy : IValidationStrategy<FileHeader>
         var errors = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         // Validate FileSignature
-        ValidateFileSignature(context.FileSignature, errors);
+        ValidateFileSignature(context.Signature, errors);
 
-        return errors.Count != 0 ? ValidationResult.Fail(errors) : ValidationResult.Success();
+        return errors.Count is not 0 ? ValidationResult.Fail(errors) : ValidationResult.Success();
     }
 
     /// <summary>
@@ -33,7 +33,7 @@ public class FileHeaderValidationStrategy : IValidationStrategy<FileHeader>
     private static void ValidateFileSignature(FileSignature signature, Dictionary<string, string> errors)
     {
         // Check signature length
-        if (!signature.Signature.Any()) errors.Add("FileSignature.Signature", "Signature cannot be empty.");
+        if (signature.Signature.Length is 0) errors.Add("FileSignature.Signature", "Signature cannot be empty.");
 
         // MediaType validation
         if (string.IsNullOrWhiteSpace(signature.MediaType))

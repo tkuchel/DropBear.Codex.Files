@@ -1,46 +1,109 @@
-using DropBear.Codex.Files.Interfaces;
-using DropBear.Codex.Files.Models.FileComponents;
+using DropBear.Codex.Files.Models.FileComponents.MainComponents;
+using DropBear.Codex.Files.Models.FileComponents.SubComponents;
 using MessagePack;
 
 namespace DropBear.Codex.Files.Models;
 
-/// <summary>
-///     Represents a DropBear file with metadata, compression settings, and content.
-/// </summary>
 [MessagePackObject]
 public class DropBearFile
 {
-    [SerializationConstructor]
-    public DropBearFile(IFileMetaData metaData, ICompressionSettings compressionSettings, IFileContent content)
+    // Default constructor for MessagePack and empty file creation
+    public DropBearFile()
     {
-        MetaData = metaData;
-        CompressionSettings = compressionSettings;
-        Content = content;
+        // Initialize with default values
+        Header = new FileHeader();
+        Metadata = new FileMetadata();
+        Content = new FileContent();
+        CompressContent = false; // Default to not compressing content
     }
 
-    [Key(0)] public IFileHeader Header { get; private set; } = new FileHeader();
+    // Constructor that accepts minimal parameters for file creation
+    public DropBearFile(string fileName, string fileOwner, bool compressContent = false)
+    {
+        Header = new FileHeader(new FileVersion(), new FileSignature());
+        Metadata = new FileMetadata
+        {
+            FileName = fileName,
+            FileOwner = fileOwner,
+            FileCreatedDate = DateTimeOffset.UtcNow,
+            FileModifiedDate = DateTimeOffset.UtcNow
+        };
+        Content = new FileContent();
+        CompressContent = compressContent;
+    }
 
-    [Key(1)] public IFileMetaData MetaData { get; private set; }
+    [Key(0)] public FileHeader Header { get; set; }
 
-    [Key(2)] public ICompressionSettings CompressionSettings { get; private set; }
+    [Key(1)] public FileMetadata Metadata { get; set; }
 
-    [Key(3)] public IFileContent Content { get; }
+    [Key(2)] public FileContent Content { get; set; }
 
-    public static DropBearFile Reconstruct(FileHeader header, FileMetaData fileMetaData,
-        CompressionSettings compressionSettings, IFileContent fileContent) =>
-        new(fileMetaData, compressionSettings, fileContent) { Header = header };
+    [Key(3)] public bool CompressContent { get; set; }
 
-    /// <summary>
-    ///     Retrieves a specific type of content from the DropBear file, if present.
-    /// </summary>
-    /// <typeparam name="T">The type of content to retrieve.</typeparam>
-    /// <returns>An instance of the requested content type if found; otherwise, null.</returns>
-    public T? GetContent<T>() where T : class => Content.GetContent<T>();
+    // Method to add a ContentContainer to the file
+    public void AddContent(ContentContainer content)
+    {
+        Content.AddContent(content);
+        // Update metadata to reflect new content addition
+        Metadata.FileSize += content.Length;
+        Metadata.UpdateModifiedDate();
+    }
+    
+    // Method to add content to the file
+    public void AddContent(byte[] contentData, ContentTypeInfo contentType, string contentName, bool compress = false)
+    {
+        var contentContainer = new ContentContainer(contentName, contentData, contentType, compress || CompressContent);
+        Content.AddContent(contentContainer);
+        // Update metadata to reflect new content addition
+        Metadata.FileSize += contentContainer.Length;
+        Metadata.UpdateModifiedDate();
+    }
 
-    /// <summary>
-    ///     Retrieves the raw byte data for a specific type of content, identified by its content type name.
-    /// </summary>
-    /// <param name="contentTypeName">The name of the content type for which to retrieve the raw data.</param>
-    /// <returns>The raw byte data if found; otherwise, null.</returns>
-    public byte[]? GetRawContent(string contentTypeName) => Content.GetRawContent(contentTypeName);
+    // Method to update the compression state of the entire file
+    public void UpdateCompressionState(bool compress)
+    {
+        CompressContent = compress;
+        // Iterate over all content containers to update their compression state
+        foreach (var content in Content.Contents)
+        {
+            // Check if the current compression state matches the desired state
+            if (content.IsCompressed == compress) continue;
+            // Get the current content, compressed or decompressed as needed
+            var currentContent = content.IsCompressed
+                ? ContentContainer.DecompressContent(content.Content)
+                : content.Content;
+            // Set the content again, specifying whether it should be compressed
+            content.SetContent(currentContent, compress);
+        }
+    }
+
+    public bool VerifyDropBearFileIntegrity() =>
+        // Verify File Metadata
+        VerifyMetadata() &&
+        // Update and Verify Content Hashes
+        UpdateAndVerifyContentHashes();
+
+    private bool VerifyMetadata()
+    {
+        // Verify that the Metadata.FileSize matches the sum of the Content lengths
+        var totalContentSize = Content.Contents.Sum(content => content.Length);
+        return Metadata.FileSize == totalContentSize;
+    }
+
+    private bool UpdateAndVerifyContentHashes()
+    {
+        foreach (var content in Content.Contents)
+        {
+            // Update hash for each content
+            var updatedHash = content.UpdateContentHash(); // Assumes existence of a method to update hash
+
+            // Verify the hash is correct (e.g., matches a stored or expected value)
+            if (!content.VerifyContentHash()) return false; // Hash verification failed for content
+
+            // Optionally, update ContentTypeVerificationHashes in Metadata if needed
+            Metadata.ContentTypeVerificationHashes[content.ContentType.TypeName] = updatedHash;
+        }
+
+        return true; // All content hashes are updated and verified
+    }
 }

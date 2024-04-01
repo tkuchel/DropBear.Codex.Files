@@ -1,107 +1,58 @@
-using System.Collections.ObjectModel;
+using FileSignatures;
 using MessagePack;
 
 namespace DropBear.Codex.Files.Models.FileComponents.SubComponents;
 
-/// <summary>
-/// Represents a file signature.
-/// </summary>
 [MessagePackObject]
-public class FileSignature : IEquatable<FileSignature>
+public class FileSignature : FileFormat, IComparable<FileFormat>, IEquatable<FileFormat>
 {
-    // This constructor is necessary for MessagePack deserialization.
-    // Ensure it's empty or initializes properties with default values.
-    [SerializationConstructor]
-    public FileSignature() { }
-
-    public FileSignature(byte[] signature, string mediaType, string extension, int headerLength = 0, int offset = 0)
+    public FileSignature() : base("dbf202441"u8.ToArray(), "application/dropbear-file", ".dbf")
     {
-        Signature = new ReadOnlyCollection<byte>(signature ?? throw new ArgumentNullException(nameof(signature), "Signature cannot be null."));
-        HeaderLength = headerLength == 0 ? Signature.Count : headerLength;
-        Extension = extension ?? throw new ArgumentNullException(nameof(extension), "Extension cannot be null.");
-        MediaType = !string.IsNullOrEmpty(mediaType) ? mediaType : throw new ArgumentNullException(nameof(mediaType), "MediaType cannot be null or empty.");
-        Offset = offset;
     }
 
-    [Key(0)]
-    public ReadOnlyCollection<byte> Signature { get; private set; }
+    [Key(0)] public new byte[] Signature { get; } = "dbf202441"u8.ToArray();
 
-    [Key(1)]
-    public int HeaderLength { get; private set; }
+    [Key(1)] public new string MediaType { get; } = "application/dropbear-file";
 
-    [Key(2)]
-    public string Extension { get; private set; }
+    [Key(2)] public new string Extension { get; } = ".dbf";
 
-    [Key(3)]
-    public string MediaType { get; private set; }
-
-    [Key(4)]
-    public int Offset { get; private set; }
-
-    /// <summary>
-    ///     Determines whether the specified object is equal to the current file signature.
-    /// </summary>
-    /// <param name="other">The object to compare with the current file signature.</param>
-    /// <returns><c>true</c> if the specified object is equal to the current file signature; otherwise, <c>false</c>.</returns>
-    public bool Equals(FileSignature? other) => (other is not null &&
-                                                 ReferenceEquals(this, other)) ||
-                                                (GetType() == other?.GetType() &&
-                                                 Signature.SequenceEqual(other.Signature) &&
-                                                 HeaderLength == other.HeaderLength &&
-                                                 Extension == other.Extension &&
-                                                 MediaType == other.MediaType &&
-                                                 Offset == other.Offset);
-
-    /// <summary>
-    ///     Determines whether the specified stream matches the file signature.
-    /// </summary>
-    /// <param name="stream">The stream to check for a match.</param>
-    /// <returns><c>true</c> if the stream matches the file signature; otherwise, <c>false</c>.</returns>
-    public bool IsMatch(Stream stream)
+    // Implement IComparable
+    public int CompareTo(FileFormat? other)
     {
-        if (stream is null) throw new ArgumentNullException(nameof(stream), "Stream cannot be null.");
-        if (stream.Length < HeaderLength || Offset > stream.Length - HeaderLength) return false;
+        if (other is null) return 1;
 
-        var originalPosition = stream.Position;
-        try
-        {
-            stream.Position = Offset;
-            var buffer = new byte[Signature.Count];
-            return stream.Read(buffer, 0, buffer.Length) == buffer.Length && buffer.SequenceEqual(Signature);
-        }
-        finally
-        {
-            stream.Position = originalPosition;
-        }
+        var mediaTypeComparison = string.Compare(MediaType, other.MediaType, StringComparison.Ordinal);
+        return mediaTypeComparison is not 0
+            ? mediaTypeComparison
+            : string.Compare(Extension, other.Extension, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    ///     Determines whether the specified object is equal to the current file signature.
-    /// </summary>
-    /// <param name="obj">The object to compare with the current file signature.</param>
-    /// <returns><c>true</c> if the specified object is equal to the current file signature; otherwise, <c>false</c>.</returns>
-    public override bool Equals(object? obj) => Equals(obj as FileSignature);
+    public new bool Equals(FileFormat? other) =>
+        other is not null &&
+        Signature.SequenceEqual(other.Signature) &&
+        MediaType == other.MediaType &&
+        Extension == other.Extension;
 
-    /// <summary>
-    ///     Returns the hash code for the current file signature.
-    /// </summary>
-    /// <returns>A hash code for the current file signature.</returns>
-    public override int GetHashCode()
-    {
-        unchecked
-        {
-            var hash = 17;
-            hash = hash * 31 + HeaderLength.GetHashCode();
-            hash = hash * 31 + Offset.GetHashCode();
-            hash = hash * 31 + Extension.GetHashCode(StringComparison.OrdinalIgnoreCase);
-            hash = hash * 31 + MediaType.GetHashCode(StringComparison.OrdinalIgnoreCase);
-            return Signature.Aggregate(hash, (current, element) => current * 31 + element.GetHashCode());
-        }
-    }
+    // Implement IEquatable
+    public override bool Equals(object obj) => Equals(obj as FileFormat);
 
-    /// <summary>
-    ///     Returns a string that represents the current object.
-    /// </summary>
-    /// <returns>A string that represents the current object.</returns>
-    public override string ToString() => $"{MediaType} ({Extension})";
+    public override int GetHashCode() => HashCode.Combine(MediaType, Extension, Signature);
+
+    // Define operators
+    public static bool operator ==(FileSignature left, FileFormat right) =>
+        EqualityComparer<FileFormat>.Default.Equals(left, right);
+
+    public static bool operator !=(FileSignature left, FileFormat right) => !(left == right);
+
+    public static bool operator <(FileSignature? left, FileFormat? right) =>
+        left is null ? right is not null : left.CompareTo(right) < 0;
+
+    public static bool operator <=(FileSignature? left, FileFormat? right) =>
+        left is null || left.CompareTo(right) <= 0;
+
+    public static bool operator >(FileSignature? left, FileFormat? right) =>
+        left is not null && left.CompareTo(right) > 0;
+
+    public static bool operator >=(FileSignature? left, FileFormat? right) =>
+        left is not null && left.CompareTo(right) >= 0;
 }

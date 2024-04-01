@@ -1,8 +1,6 @@
 using DropBear.Codex.Core.ReturnTypes;
-using DropBear.Codex.Files.MessagePackChecker;
-using DropBear.Codex.Serialization.Services;
 
-namespace DropBear.Codex.Files.PreflightTasks;
+namespace DropBear.Codex.Files.MessagePackChecker;
 
 public static class MessagePackCompatibilityAggregator
 {

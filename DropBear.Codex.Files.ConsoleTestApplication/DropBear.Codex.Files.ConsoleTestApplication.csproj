@@ -11,8 +11,4 @@
       <ProjectReference Include="..\DropBear.Codex.Files\DropBear.Codex.Files.csproj" />
     </ItemGroup>
 
-    <ItemGroup>
-      <PackageReference Include="DropBear.Codex.Serialization" Version="2024.3.13" />
-    </ItemGroup>
-
 </Project>

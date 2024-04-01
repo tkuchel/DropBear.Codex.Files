@@ -1,34 +1,48 @@
+using System.Reflection;
+using DropBear.Codex.Files.Exceptions;
 using MessagePack;
 
 namespace DropBear.Codex.Files.Models.FileComponents.SubComponents;
 
-/// <summary>
-///     Represents information about a content type.
-/// </summary>
 [MessagePackObject]
 public class ContentTypeInfo
 {
-    [SerializationConstructor]
-    public ContentTypeInfo()
+    // Static cache to hold loaded types for performance
+    private static readonly Dictionary<string, Type> TypeCache = new(StringComparer.OrdinalIgnoreCase);
+
+    public ContentTypeInfo(string assemblyName, string typeName, string nameSpace)
     {
-        
+        AssemblyName = assemblyName;
+        TypeName = typeName;
+        NameSpace = nameSpace;
     }
-    
-    /// <summary>
-    ///     Gets or sets the name of the assembly.
-    /// </summary>
-    [Key(0)]
-    public string AssemblyName { get; set; } = string.Empty;
 
-    /// <summary>
-    ///     Gets or sets the name of the type.
-    /// </summary>
-    [Key(1)]
-    public string TypeName { get; set; } = string.Empty;
+    [Key(0)] public string AssemblyName { get; }
 
-    /// <summary>
-    ///     Gets or sets the namespace of the type.
-    /// </summary>
-    [Key(2)]
-    public string Namespace { get; set; } = string.Empty;
+    [Key(1)] public string TypeName { get; }
+
+    [Key(2)] private string NameSpace { get; }
+
+    private string GetFullTypeName() => $"{NameSpace}.{TypeName}";
+
+    public Type GetContentType()
+    {
+        var fullTypeName = GetFullTypeName();
+        if (TypeCache.TryGetValue(fullTypeName, out var type)) return type;
+
+        var assembly = Assembly.Load(AssemblyName);
+        type = assembly.GetType(fullTypeName);
+
+        if (type != null) TypeCache[fullTypeName] = type;
+
+        return type ?? throw new ContentTypeNotFoundException("Content type not found.");
+    }
+
+    public override bool Equals(object? obj) =>
+        obj is ContentTypeInfo info &&
+        AssemblyName == info.AssemblyName &&
+        TypeName == info.TypeName &&
+        NameSpace == info.NameSpace;
+
+    public override int GetHashCode() => HashCode.Combine(AssemblyName, TypeName, NameSpace);
 }

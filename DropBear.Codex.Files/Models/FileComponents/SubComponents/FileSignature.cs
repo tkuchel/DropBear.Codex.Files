@@ -3,18 +3,18 @@ using MessagePack;
 
 namespace DropBear.Codex.Files.Models.FileComponents.SubComponents;
 
-[MessagePackObject]
+[MessagePackObject(keyAsPropertyName:true)]
 public class FileSignature : FileFormat, IComparable<FileFormat>, IEquatable<FileFormat>
 {
     public FileSignature() : base("dbf202441"u8.ToArray(), "application/dropbear-file", ".dbf")
     {
     }
 
-    [Key(0)] public new byte[] Signature { get; } = "dbf202441"u8.ToArray();
+    public new byte[] Signature { get; } = "dbf202441"u8.ToArray();
 
-    [Key(1)] public new string MediaType { get; } = "application/dropbear-file";
+    public new string MediaType { get; } = "application/dropbear-file";
 
-    [Key(2)] public new string Extension { get; } = ".dbf";
+    public new string Extension { get; } = "dbf";
 
     // Implement IComparable
     public int CompareTo(FileFormat? other)

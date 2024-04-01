@@ -7,6 +7,12 @@ namespace DropBear.Codex.Files.Models.FileComponents.SubComponents;
 [MessagePackObject]
 public class ContentContainer
 {
+    // Default constructor for MessagePack
+    [Obsolete("For MessagePack", false)]
+    public ContentContainer()
+    {
+    }
+    
     public ContentContainer(string name, byte[] content, ContentTypeInfo contentType, bool compress = false)
     {
         Name = name;

@@ -10,6 +10,11 @@ public class ContentTypeInfo
     // Static cache to hold loaded types for performance
     private static readonly Dictionary<string, Type> TypeCache = new(StringComparer.OrdinalIgnoreCase);
 
+    [Obsolete("For MessagePack", false)]
+    public ContentTypeInfo()
+    {
+        
+    }
     public ContentTypeInfo(string assemblyName, string typeName, string nameSpace)
     {
         AssemblyName = assemblyName;

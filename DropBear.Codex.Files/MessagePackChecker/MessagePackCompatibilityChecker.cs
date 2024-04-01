@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Reflection;
 using DropBear.Codex.Core.ReturnTypes;
+using DropBear.Codex.Files.Models.FileComponents.SubComponents;
 using MessagePack;
 
 namespace DropBear.Codex.Files.MessagePackChecker;
@@ -45,10 +46,16 @@ public class MessagePackCompatibilityChecker
     private static bool PerformCompatibilityChecks(Type type)
     {
         if (!type.IsPublic || type.IsNested) return false;
+        
+        var messagePackObjectAttribute = type.GetCustomAttribute<MessagePackObjectAttribute>();
+        if (messagePackObjectAttribute is null) return false; // Type must have MessagePackObject attribute
 
-        if (type.GetCustomAttribute<MessagePackObjectAttribute>() is null) return false;
+        var keyAsPropertyName = messagePackObjectAttribute.KeyAsPropertyName;
+
+        if (keyAsPropertyName) return true; // No need to check for Key or IgnoreMember attributes
 
         var members = GetAllSerializableMembers(type);
+        
         if (members.Any(member => member.GetCustomAttribute<KeyAttribute>() is null &&
                                   member.GetCustomAttribute<IgnoreMemberAttribute>() is null)) return false;
 

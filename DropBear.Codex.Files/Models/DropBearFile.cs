@@ -46,6 +46,7 @@ public class DropBearFile
         Content.AddContent(content);
         // Update metadata to reflect new content addition
         Metadata.FileSize += content.Length;
+        Metadata.AddContentTypeAndHash(content.ContentType, content.Content);
         Metadata.UpdateModifiedDate();
     }
     
@@ -56,6 +57,7 @@ public class DropBearFile
         Content.AddContent(contentContainer);
         // Update metadata to reflect new content addition
         Metadata.FileSize += contentContainer.Length;
+        Metadata.AddContentTypeAndHash(contentType, contentContainer.Content);
         Metadata.UpdateModifiedDate();
     }
 

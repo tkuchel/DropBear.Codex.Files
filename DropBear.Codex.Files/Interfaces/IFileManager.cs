@@ -5,7 +5,7 @@ namespace DropBear.Codex.Files.Interfaces;
 public interface IFileManager
 {
     Task<DropBearFile?> CreateFileAsync<T>(string name, T content, bool compress = false,
-        Type? contentType = null) where T : class;
+        Type? contentType = null,bool forceCreation = false) where T : class;
 
     Task WriteFileAsync(DropBearFile file, string filePath);
     Task<DropBearFile?> ReadFileAsync(string filePath, CancellationToken cancellationToken = default);

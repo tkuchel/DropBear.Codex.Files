@@ -21,7 +21,7 @@ namespace DropBear.Codex.Files.Services;
 
 public class FileManager : IFileManager
 {
-    private const int HashSize = 64; // SHA256 hash in hex string format encoded to bytes
+    private const int HashSize = 32; // 256 bits
     private readonly IAppLogger<FileManager> _logger;
     private readonly IMessageTemplateManager _messageTemplateManager;
     private readonly IStrategyValidator _strategyValidator;
@@ -38,91 +38,6 @@ public class FileManager : IFileManager
         _ = InitializeAsync();
     }
 
-    private Task InitializeAsync()
-    {
-        _logger.LogInformation("Initializing FileManager...");
-
-        RegisterValidationStrategies();
-        RegisterMessageTemplates();
-        CheckMessagePackCompatibility();
-
-        _logger.LogInformation("FileManager initialized.");
-
-        return Task.CompletedTask;
-    }
-
-    public async Task<DropBearFile?> CreateFileAsync<T>(string name, T content, bool compress = false,
-        Type? contentType = null) where T : class
-    {
-        try
-        {
-            ContentContainer? container;
-
-            // Validate name and path
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                _logger.LogError("File name cannot be null or empty.");
-                return null;
-            }
-
-            // Strip the file extension from name if it exists
-            name = Path.GetFileNameWithoutExtension(name);
-
-            // Handling non-generic version if contentType is provided
-            if (contentType != null)
-            {
-                var serializedContent = JsonSerializer.SerializeToString(content).GetBytes();
-                var contentTypeInfo = new ContentTypeInfo(contentType.Assembly.FullName!, contentType.Name,
-                    contentType.Namespace!);
-                container = new ContentContainer(name, serializedContent, contentTypeInfo, compress);
-            }
-            // Handling generic version
-            else
-            {
-                container = typeof(T) == typeof(byte[])
-                    ? new ContentContainer(typeof(byte[]), name,
-                        content as byte[] ?? throw new InvalidOperationException("Content cannot be null or empty."),
-                        compress)
-                    : new ContentContainer<T>(name, content, compress);
-            }
-
-            // Assuming DropBearFile constructor or a factory method can take a ContentContainer
-            var dropBearFile = new DropBearFile(name, Environment.UserName, compress);
-            dropBearFile.AddContent(container);
-
-            // List to hold all validation tasks
-            var validationTasks = new List<Task<ValidationResult>>
-            {
-                _strategyValidator.ValidateAsync(dropBearFile),
-                _strategyValidator.ValidateAsync(dropBearFile.Content),
-                _strategyValidator.ValidateAsync(dropBearFile.Header),
-                _strategyValidator.ValidateAsync(dropBearFile.Metadata)
-            };
-
-            // Await all validation tasks
-            var validationResults = await Task.WhenAll(validationTasks).ConfigureAwait(false);
-
-            // Aggregate results
-            var aggregatedResult = validationResults.Aggregate(ValidationResult.Success(),
-                (current, result) => current.Combine(result));
-
-            if (!aggregatedResult.IsValid)
-            {
-                var errors = string.Join("; ",
-                    aggregatedResult.Errors.Select(err => $"{err.Parameter}: {err.ErrorMessage}"));
-                _logger.LogInformation($"File validation failed: {errors}");
-                return null;
-            }
-
-            _logger.LogInformation("DropBear file created successfully.");
-            return dropBearFile;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError($"Error creating DropBear file: {ex.Message}");
-            return null;
-        }
-    }
 
     public async Task WriteFileAsync(DropBearFile file, string filePath)
     {
@@ -131,6 +46,7 @@ public class FileManager : IFileManager
 
         // Sanitize the file path
         filePath = Path.GetFullPath(filePath);
+        var fullFilePathAndName = Path.Combine(filePath, $"{file.Metadata.FileName}.{file.Header.Signature.Extension}");
 
         // Validate the path exists or create it
         if (!Directory.Exists(filePath))
@@ -143,11 +59,14 @@ public class FileManager : IFileManager
         try
         {
             // Attempt to create or write to the file
-            var stream = File.Create(filePath);
+            var stream = File.Create(fullFilePathAndName);
             await using (stream.ConfigureAwait(false))
             {
                 // File operation
             }
+
+            // If the file was created successfully, delete it to avoid overwriting it
+            DeleteFile(fullFilePathAndName);
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -167,7 +86,7 @@ public class FileManager : IFileManager
 
         try
         {
-            var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
+            var fileStream = new FileStream(fullFilePathAndName, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
             await using (fileStream.ConfigureAwait(false))
             {
                 var headerBytes = MessagePackSerializer.Serialize(file.Header, options);
@@ -213,12 +132,17 @@ public class FileManager : IFileManager
 
                 // Continue reading the rest of the file (metadata, content, etc.)
                 var componentData = new List<byte[]> { headerBytes }; // Include the header bytes already read
-                while (fileStream.Position < fileStream.Length - HashSize) // Excluding hash
+                while (fileStream.Position < fileStream.Length - HashSize)
                 {
-                    var component = await ReadWithLengthPrefixAsync(fileStream, cancellationToken)
-                        .ConfigureAwait(false);
+                    long remaining = fileStream.Length - fileStream.Position - HashSize;
+                    _logger.LogInformation($"Reading component, stream position: {fileStream.Position}, bytes remaining before hash: {remaining}");
+
+                    var component = await ReadWithLengthPrefixAsync(fileStream, cancellationToken).ConfigureAwait(false);
                     componentData.Add(component);
+
+                    _logger.LogInformation($"Component length: {component.Length}, new stream position: {fileStream.Position}");
                 }
+
 
                 // Compute hash of read content (excluding the appended hash) for verification
                 var contentWithoutHash = componentData.SelectMany(a => a).ToArray();
@@ -291,13 +215,100 @@ public class FileManager : IFileManager
         }
     }
 
+    public async Task<DropBearFile?> CreateFileAsync<T>(string name, T content, bool compress = false,
+        Type? contentType = null, bool forceCreation = false) where T : class
+    {
+        try
+        {
+            // Validate name
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                _logger.LogError("File name cannot be null or empty.");
+                return null;
+            }
+
+            name = Path.GetFileNameWithoutExtension(name); // Strip the file extension from name if it exists
+
+            ContentContainer? container;
+            // Handling based on contentType being provided or not
+            if (contentType != null)
+            {
+                var serializedContent = JsonSerializer.SerializeToString(content).GetBytes();
+                container = new ContentContainer(name, serializedContent,
+                    new ContentTypeInfo(contentType.Assembly.FullName!, contentType.Name, contentType.Namespace!),
+                    compress);
+            }
+            else
+            {
+                container = typeof(T) == typeof(byte[])
+                    ? new ContentContainer(typeof(byte[]), name,
+                        content as byte[] ?? throw new InvalidOperationException("Content cannot be null or empty."),
+                        compress)
+                    : new ContentContainer<T>(name, content, compress);
+            }
+
+            var dropBearFile =
+                new DropBearFile(name, Environment.UserName, compress);
+            dropBearFile.AddContent(container);
+
+            // Perform validation
+            var validationTasks = new List<Task<ValidationResult>>
+            {
+                _strategyValidator.ValidateAsync(dropBearFile)
+                // Add other validations as needed
+            };
+
+            var validationResults = await Task.WhenAll(validationTasks).ConfigureAwait(false);
+            var aggregatedResult = validationResults.Aggregate(ValidationResult.Success(),
+                (current, result) => current.Combine(result));
+
+            if (!aggregatedResult.IsValid)
+            {
+                var errors = string.Join("; ",
+                    aggregatedResult.Errors.Select(err => $"{err.Parameter}: {err.ErrorMessage}"));
+                _logger.LogWarning($"File validation failed: {errors}");
+
+                if (!forceCreation) // Return null if forceCreation is false and validation failed
+                    return null;
+            }
+
+            _logger.LogInformation("DropBear file created successfully.");
+            return dropBearFile; // Return the file regardless of validation if forceCreation is true
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Error creating DropBear file: {ex.Message}");
+            return null;
+        }
+    }
+
+    private Task InitializeAsync()
+    {
+        _logger.LogInformation("Initializing FileManager...");
+
+        RegisterValidationStrategies();
+        RegisterMessageTemplates();
+
+        if (CheckMessagePackCompatibility().IsValid)
+            _logger.LogInformation("MessagePack compatibility check passed.");
+        else
+            _logger.LogWarning("MessagePack compatibility check failed.");
+
+        _logger.LogInformation("FileManager initialized.");
+
+        return Task.CompletedTask;
+    }
+
     private bool VerifyFileSignature(byte[] actualSignature)
     {
         try
         {
             var expectedSignature =
                 new FileSignature().Signature; // Assuming a default constructor sets the expected signature
-            return actualSignature.SequenceEqual(expectedSignature);
+            //Console.WriteLine(BitConverter.ToString(actualSignature));
+            //Console.WriteLine(BitConverter.ToString(expectedSignature));
+
+            return actualSignature.AsSpan().SequenceEqual(expectedSignature.AsSpan());
         }
         catch (Exception ex)
         {
@@ -336,15 +347,11 @@ public class FileManager : IFileManager
         return dropBearFile;
     }
 
-    private static bool VerifyHash(string computedHash, byte[] expectedHash)
+    private static bool VerifyHash(byte[] computedHash, byte[] expectedHash)
     {
-        // Convert the byte array to a hex string.
-        var expectedHashString = BitConverter.ToString(expectedHash).Replace("-", "", StringComparison.Ordinal)
-            .ToUpperInvariant();
-
-        // Compare the computed hash string with the expected hash string.
-        return computedHash.Equals(expectedHashString, StringComparison.OrdinalIgnoreCase);
+        return computedHash.SequenceEqual(expectedHash);
     }
+
 
     private void RegisterValidationStrategies()
     {
@@ -419,18 +426,20 @@ public class FileManager : IFileManager
 
     private static async Task ReadExactAsync(Stream stream, byte[] buffer, CancellationToken cancellationToken)
     {
-        var totalBytesRead = 0;
-        var bytesToRead = buffer.Length;
+        int totalBytesRead = 0;
+        int bytesToRead = buffer.Length;
 
         while (totalBytesRead < bytesToRead)
         {
-            var bytesRead = await stream.ReadAsync(buffer.AsMemory(totalBytesRead, bytesToRead - totalBytesRead),
-                cancellationToken).ConfigureAwait(false);
-            if (bytesRead is 0) throw new EndOfStreamException("The stream ended before all the data could be read.");
-
+            var bytesRead = await stream.ReadAsync(buffer.AsMemory(totalBytesRead, bytesToRead - totalBytesRead), cancellationToken).ConfigureAwait(false);
+            if (bytesRead == 0)
+            {
+                throw new EndOfStreamException($"The stream ended before all the data could be read. Total bytes read: {totalBytesRead}, Expected: {bytesToRead}.");
+            }
             totalBytesRead += bytesRead;
         }
     }
+
 
     private static async Task<byte[]> ReadHashFromEndAsync(Stream stream, int hashSize,
         CancellationToken cancellationToken = default)
@@ -480,38 +489,14 @@ public class FileManager : IFileManager
 
         return hashString;
     }
-
-    private static async Task<string> ComputeHashAsync(Stream stream, CancellationToken cancellationToken = default)
+    private static async Task<byte[]> ComputeHashAsync(Stream stream, CancellationToken cancellationToken = default)
     {
-        if (!stream.CanSeek) throw new InvalidOperationException("Stream must support seeking for hash computation.");
-
-        // Ensure the stream is at the beginning for hashing
+        // Reset the position of the stream to the beginning.
         stream.Seek(0, SeekOrigin.Begin);
-
-        // Calculate the length of the content to hash, excluding the appended hash
-        var contentLengthToHash = stream.Length - HashSize;
-
         using var hasher = SHA256.Create();
-        var buffer = new byte[8192]; // Buffer size of 8KB, can adjust based on your requirements
-        int bytesRead;
-        long totalBytesRead = 0;
-
-        // Read and hash the content in chunks
-        while (totalBytesRead < contentLengthToHash &&
-               (bytesRead = await stream
-                   .ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, contentLengthToHash - totalBytesRead)),
-                       cancellationToken).ConfigureAwait(false)) > 0)
-        {
-            hasher.TransformBlock(buffer, 0, bytesRead, null, 0);
-            totalBytesRead += bytesRead;
-        }
-
-        hasher.TransformFinalBlock(Array.Empty<byte>(), 0, 0); // Complete the hash computation
-
-        // Convert the computed hash to a hexadecimal string
-        if (hasher.Hash is null) return string.Empty;
-        var computedHash = BitConverter.ToString(hasher.Hash).Replace("-", "", StringComparison.Ordinal)
-            .ToUpperInvariant();
-        return computedHash;
+        // Compute the hash on the stream directly.
+        var hash = await hasher.ComputeHashAsync(stream, cancellationToken).ConfigureAwait(false);
+        return hash; // Return the binary hash
     }
+
 }

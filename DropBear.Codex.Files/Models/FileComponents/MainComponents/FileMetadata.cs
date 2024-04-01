@@ -32,9 +32,9 @@ public class FileMetadata
     public void UpdateFileSize(int size) => FileSize = size;
 
     // Adds a new content type and hash to the ContentTypeVerificationHashes
-    public void AddContentTypeAndHash(ContentTypeInfo contentType, string content)
+    public void AddContentTypeAndHash(ContentTypeInfo contentType, byte[] content)
     {
-        var hash = Hasher.Hash(content.GetBytes()).ToString();
+        var hash = Hasher.Hash(content).ToString();
         ContentTypeVerificationHashes[contentType.TypeName] = hash;
         AddContentType(contentType);
     }

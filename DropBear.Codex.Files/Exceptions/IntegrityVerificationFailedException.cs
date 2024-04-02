@@ -3,35 +3,35 @@ using System;
 namespace DropBear.Codex.Files.Exceptions
 {
     /// <summary>
-    /// Exception thrown when the content of a file is not found.
+    /// Exception thrown when integrity verification of a file fails.
     /// </summary>
-    public class FileContentNotFoundException : Exception
+    public class IntegrityVerificationFailedException : Exception
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="FileContentNotFoundException"/> class with a specified error message.
+        /// Initializes a new instance of the <see cref="IntegrityVerificationFailedException"/> class with a specified error message.
         /// </summary>
         /// <param name="message">The message that describes the error.</param>
-        public FileContentNotFoundException(string message) : base(message)
+        public IntegrityVerificationFailedException(string message) : base(message)
         {
             // No additional logic needed for this constructor.
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="FileContentNotFoundException"/> class.
+        /// Initializes a new instance of the <see cref="IntegrityVerificationFailedException"/> class.
         /// </summary>
-        public FileContentNotFoundException()
+        public IntegrityVerificationFailedException()
         {
             // No additional logic needed for this constructor.
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="FileContentNotFoundException"/> class with a specified error message
+        /// Initializes a new instance of the <see cref="IntegrityVerificationFailedException"/> class with a specified error message
         /// and a reference to the inner exception that is the cause of this exception.
         /// </summary>
         /// <param name="message">The error message that explains the reason for the exception.</param>
         /// <param name="innerException">The exception that is the cause of the current exception, or a null reference
         /// if no inner exception is specified.</param>
-        public FileContentNotFoundException(string message, Exception innerException) : base(message, innerException)
+        public IntegrityVerificationFailedException(string message, Exception innerException) : base(message, innerException)
         {
             // No additional logic needed for this constructor.
         }

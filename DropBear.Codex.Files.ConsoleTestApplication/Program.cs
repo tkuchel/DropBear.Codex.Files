@@ -2,7 +2,7 @@
 using DropBear.Codex.AppLogger.Interfaces;
 using DropBear.Codex.Files.ConsoleTestApplication.Models;
 using DropBear.Codex.Files.Interfaces;
-using DropBear.Codex.Files.Models;
+using DropBear.Codex.Files.Services;
 using Microsoft.Extensions.DependencyInjection;
 using ServiceStack.Text;
 
@@ -24,17 +24,17 @@ internal class Program
         var fileManager = serviceProvider.GetRequiredService<IFileManager>();
 
         logger.LogInformation($"Started at {DateTimeOffset.UtcNow}");
-        
+
         // Create a test data object
         var testData = CreateTestData();
-        
+
         // Create a DropBearFile object
-        var dropBearFile = await fileManager.CreateFileAsync<TestData>("TestFile", testData);
+        var dropBearFile = await fileManager.CreateFileAsync("TestFile", testData);
         dropBearFile.Dump();
-        
+
         // Write the file to disk
-        await fileManager.WriteFileAsync(dropBearFile, @"C:\Temp");
-        
+        if (dropBearFile != null) await fileManager.WriteFileAsync(dropBearFile, @"C:\Temp");
+
         // Read the file from disk
         var readDropBearFile = await fileManager.ReadFileAsync(@"C:\Temp\TestFile.dbf");
         readDropBearFile.Dump();

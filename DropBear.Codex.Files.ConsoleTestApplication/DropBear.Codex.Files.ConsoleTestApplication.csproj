@@ -8,7 +8,14 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\DropBear.Codex.Files\DropBear.Codex.Files.csproj" />
+        <ProjectReference Include="..\DropBear.Codex.Files\DropBear.Codex.Files.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="MessagePackAnalyzer" Version="2.5.140">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
     </ItemGroup>
 
 </Project>

@@ -26,11 +26,11 @@ public static class ServiceCollectionExtensions
 
         // Add validation services
         services.AddValidationServices();
+        
+        // Add MessageTemplateManager service
+        services.AddMessageTemplateManager();
 
         // Add file manager service
         services.AddSingleton<IFileManager, FileManager>();
-
-        // Add MessageTemplateManager service
-        services.AddMessageTemplateManager();
     }
 }

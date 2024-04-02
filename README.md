@@ -1,6 +1,7 @@
 # DropBear.Codex.Files
 
-DropBear.Codex.Files is a .NET library designed to streamline the management of file operations, including creation, serialization, validation, and storage of custom file formats with a focus on performance and flexibility.
+DropBear.Codex.Files is a .NET library designed to streamline the management of file operations, including creation,
+serialization, validation, and storage of custom file formats with a focus on performance and flexibility.
 
 ## Features
 
@@ -18,6 +19,7 @@ To use DropBear.Codex.Files in your project, add the library via NuGet:
 ```shell
 dotnet add package DropBear.Codex.Files
 ```
+
 ## Usage
 
 Quickstart on creating a file, serializing, and validating it:
@@ -28,7 +30,8 @@ Quickstart on creating a file, serializing, and validating it:
 
 ## Contribution
 
-Contributions are welcome! If you have suggestions or want to contribute code, please feel free to create issues or pull requests on GitHub.
+Contributions are welcome! If you have suggestions or want to contribute code, please feel free to create issues or pull
+requests on GitHub.
 
 ## License
 

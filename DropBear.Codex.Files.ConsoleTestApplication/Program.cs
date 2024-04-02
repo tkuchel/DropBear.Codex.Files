@@ -2,9 +2,7 @@
 using DropBear.Codex.AppLogger.Interfaces;
 using DropBear.Codex.Files.ConsoleTestApplication.Models;
 using DropBear.Codex.Files.Interfaces;
-using DropBear.Codex.Files.Services;
 using Microsoft.Extensions.DependencyInjection;
-using ServiceStack.Text;
 
 namespace DropBear.Codex.Files.ConsoleTestApplication;
 
@@ -27,17 +25,38 @@ internal class Program
 
         // Create a test data object
         var testData = CreateTestData();
+        const string path = @"C:\Temp\";
 
         // Create a DropBearFile object
         var dropBearFile = await fileManager.CreateFileAsync("TestFile", testData);
-        dropBearFile.Dump();
+
+        var fullPathAndNameWithExt = path + dropBearFile?.GetFileNameWithExtension();
 
         // Write the file to disk
-        if (dropBearFile != null) await fileManager.WriteFileAsync(dropBearFile, @"C:\Temp");
+        if (dropBearFile != null) await fileManager.WriteFileAsync(dropBearFile, path);
 
         // Read the file from disk
-        var readDropBearFile = await fileManager.ReadFileAsync(@"C:\Temp\TestFile.dbf");
-        readDropBearFile.Dump();
+        var readDropBearFile = await fileManager.ReadFileAsync(fullPathAndNameWithExt);
+
+        // Update the file
+        if (readDropBearFile != null)
+        {
+            readDropBearFile.Metadata.FileOwner = "UpdatedOwner";
+
+            await fileManager.UpdateFile(fullPathAndNameWithExt, readDropBearFile);
+        }
+        
+        // Read the file from disk
+        var readDropBearFileUpdated = await fileManager.ReadFileAsync(fullPathAndNameWithExt);
+        
+        // Lets check the file owner was updated to UpdatedOwner
+        if (readDropBearFileUpdated != null)
+        {
+            logger.LogInformation($"File Owner: {readDropBearFileUpdated.Metadata.FileOwner}");
+        }
+        
+        // Delete the file
+        fileManager.DeleteFile(fullPathAndNameWithExt);
 
         // Log that we are finished
         logger.LogInformation($"Finished at {DateTimeOffset.UtcNow}");

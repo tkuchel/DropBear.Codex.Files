@@ -66,7 +66,7 @@ namespace DropBear.Codex.Files.Models.FileComponents.SubComponents
         /// </summary>
         [Key(2)]
 #pragma warning disable CA1819
-        public byte[] Content { get; private set; } = Array.Empty<byte>();
+        public byte[] Content { get; set; } = Array.Empty<byte>();
 #pragma warning restore CA1819
 
         /// <summary>

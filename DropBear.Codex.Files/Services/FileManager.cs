@@ -314,7 +314,7 @@ public class FileManager : IFileManager
             }
 
             // Write the new content to the file
-            await WriteFileAsync(newContent, filePath).ConfigureAwait(false);
+            await WriteFileAsync(newContent, Path.GetDirectoryName(filePath) ?? throw new InvalidOperationException()).ConfigureAwait(false);
 
             _logger.LogInformation($"File updated successfully: {filePath}");
         }

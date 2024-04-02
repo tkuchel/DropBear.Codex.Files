@@ -134,6 +134,12 @@ namespace DropBear.Codex.Files.Models
             var totalContentSize = Content.Contents.Sum(content => content.Length);
             return Metadata.FileSize == totalContentSize;
         }
+        
+        private string GetFileName() => Metadata.FileName;
+        
+        private string GetExtension() => Header?.Signature.Extension ?? "dbf";
+        
+        public string GetFileNameWithExtension() => $"{GetFileName()}.{GetExtension()}";
 
         private bool UpdateAndVerifyContentHashes()
         {

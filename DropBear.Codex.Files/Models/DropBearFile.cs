@@ -90,6 +90,11 @@ namespace DropBear.Codex.Files.Models
         {
             var contentContainer = new ContentContainer(contentName, contentData, contentType, compress || CompressContent);
             AddContent(contentContainer);
+            
+            // Update metadata to reflect new content addition
+            Metadata.FileSize += contentData.Length;
+            Metadata.AddContentTypeAndHash(contentType, contentData);
+            Metadata.UpdateModifiedDate();
         }
 
         /// <summary>
@@ -120,11 +125,11 @@ namespace DropBear.Codex.Files.Models
         /// Verifies the integrity of the DropBear file.
         /// </summary>
         /// <returns>True if the file is valid, otherwise false.</returns>
-        public bool VerifyDropBearFileIntegrity() =>
+        private bool VerifyDropBearFileIntegrity() =>
             // Verify File Metadata
             VerifyMetadata() &&
-            // Update and Verify Content Hashes
-            UpdateAndVerifyContentHashes();
+            //Verify Content Hashes
+            VerifyContentHashes();
 
         // Private methods for integrity verification
 
@@ -156,6 +161,11 @@ namespace DropBear.Codex.Files.Models
             }
 
             return true; // All content hashes are updated and verified
+        }
+        
+        private bool VerifyContentHashes()
+        {
+            return Content.Contents.All(content => content.VerifyContentHash());
         }
 
         /// <summary>

@@ -90,6 +90,11 @@ namespace DropBear.Codex.Files.Models
         {
             var contentContainer = new ContentContainer(contentName, contentData, contentType, compress || CompressContent);
             AddContent(contentContainer);
+            
+            // Update metadata to reflect new content addition
+            Metadata.FileSize += contentData.Length;
+            Metadata.AddContentTypeAndHash(contentType, contentData);
+            Metadata.UpdateModifiedDate();
         }
 
         /// <summary>

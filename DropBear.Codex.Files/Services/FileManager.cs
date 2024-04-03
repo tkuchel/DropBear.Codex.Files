@@ -404,9 +404,10 @@ public class FileManager : IFileManager
     ///     Thrown when the data is insufficient to reconstruct the DropBearFile or
     ///     specific components are missing.
     /// </exception>
-    // ReSharper disable once UnusedMember.Local
+#pragma warning disable IDE0051
     private static DropBearFile DeserializeDropBearFile(IEnumerable<byte[]> componentData,
         CancellationToken cancellationToken = default)
+#pragma warning restore IDE0051
     {
         var components = componentData as byte[][] ?? componentData.ToArray();
         if (components.Length < 3) // Minimum expected: Header, FileMetadata, and FileContent
@@ -754,8 +755,9 @@ public class FileManager : IFileManager
     /// <remarks>
     ///     Logs an error and returns false if an unexpected issue occurs during verification.
     /// </remarks>
-    // ReSharper disable once UnusedMember.Local
+#pragma warning disable IDE0051
     private bool VerifyFileSignature(byte[] actualSignature)
+#pragma warning restore IDE0051
     {
         try
         {

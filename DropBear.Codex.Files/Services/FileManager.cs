@@ -404,6 +404,7 @@ public class FileManager : IFileManager
     ///     Thrown when the data is insufficient to reconstruct the DropBearFile or
     ///     specific components are missing.
     /// </exception>
+    // ReSharper disable once UnusedMember.Local
     private static DropBearFile DeserializeDropBearFile(IEnumerable<byte[]> componentData,
         CancellationToken cancellationToken = default)
     {
@@ -753,6 +754,7 @@ public class FileManager : IFileManager
     /// <remarks>
     ///     Logs an error and returns false if an unexpected issue occurs during verification.
     /// </remarks>
+    // ReSharper disable once UnusedMember.Local
     private bool VerifyFileSignature(byte[] actualSignature)
     {
         try

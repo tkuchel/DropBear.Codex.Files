@@ -1,54 +1,63 @@
 using DropBear.Codex.Files.Models.FileComponents.SubComponents;
 using MessagePack;
-using System;
 
-namespace DropBear.Codex.Files.Models.FileComponents.MainComponents
+namespace DropBear.Codex.Files.Models.FileComponents.MainComponents;
+
+/// <summary>
+///     Represents the header of a file, including version and signature details.
+/// </summary>
+[MessagePackObject]
+public class FileHeader
 {
     /// <summary>
-    /// Represents the header of a file.
+    ///     Initializes a new instance of the FileHeader class for MessagePack deserialization and default initialization.
     /// </summary>
-    [MessagePackObject]
-    public class FileHeader
+    [Obsolete("For MessagePack deserialization. Use parameterized constructor for explicit instantiation.", false)]
+    public FileHeader()
     {
-        // Default constructor for MessagePack deserialization
-        [Obsolete("For MessagePack", false)]
-        public FileHeader()
-        {
-            Version = new FileVersion();
-            Signature = new FileSignature();
-        }
+        Version = new FileVersion();
+        Signature = new FileSignature();
+    }
 
-        // Parameterized constructor for easy instantiation
-        /// <summary>
-        /// Initializes a new instance of the <see cref="FileHeader"/> class with the specified version and signature.
-        /// </summary>
-        /// <param name="version">The version of the file.</param>
-        /// <param name="signature">The signature of the file.</param>
-        public FileHeader(FileVersion version, FileSignature signature)
-        {
-            Version = version;
-            Signature = signature;
-        }
+    /// <summary>
+    ///     Initializes a new instance of the FileHeader class with specified version and signature.
+    /// </summary>
+    /// <param name="version">The file version.</param>
+    /// <param name="signature">The file signature.</param>
+    public FileHeader(FileVersion version, FileSignature signature)
+    {
+        Version = version ?? throw new ArgumentNullException(nameof(version), "FileVersion cannot be null.");
+        Signature = signature ?? throw new ArgumentNullException(nameof(signature), "FileSignature cannot be null.");
+    }
 
-        /// <summary>
-        /// Gets or sets the version of the file.
-        /// </summary>
-        [Key(0)]
-        public FileVersion Version { get; set; }
+    /// <summary>
+    ///     Gets the version of the file.
+    /// </summary>
+    [Key(0)]
+    public FileVersion Version { get; private set; }
 
-        /// <summary>
-        /// Gets or sets the signature of the file.
-        /// </summary>
-        [Key(1)]
-        public FileSignature Signature { get; set; }
+    /// <summary>
+    ///     Gets the signature of the file.
+    /// </summary>
+    [Key(1)]
+    public FileSignature Signature { get; private set; }
 
-        /// <summary>
-        /// Updates the version of the file.
-        /// </summary>
-        /// <param name="major">The major version number.</param>
-        /// <param name="minor">The minor version number.</param>
-        /// <param name="build">The build number.</param>
-        public void UpdateVersion(int major, int minor, int build) =>
-            Version = new FileVersion { Major = major, Minor = minor, Build = build };
+    /// <summary>
+    ///     Updates the version of the file.
+    ///     This method creates a new FileVersion instance to ensure immutability.
+    /// </summary>
+    /// <param name="major">The major version number.</param>
+    /// <param name="minor">The minor version number.</param>
+    /// <param name="build">The build number.</param>
+    /// <exception cref="ArgumentOutOfRangeException"></exception>
+    public void UpdateVersion(int major, int minor, int build)
+    {
+        if (major < 0) throw new ArgumentOutOfRangeException(nameof(major), "Major version number cannot be negative.");
+
+        if (minor < 0) throw new ArgumentOutOfRangeException(nameof(minor), "Minor version number cannot be negative.");
+
+        if (build < 0) throw new ArgumentOutOfRangeException(nameof(build), "Build number cannot be negative.");
+
+        Version = new FileVersion(major, minor, build);
     }
 }

@@ -33,7 +33,7 @@ public class FileHeaderValidationStrategy : IValidationStrategy<FileHeader>
     private static void ValidateFileSignature(FileSignature signature, Dictionary<string, string> errors)
     {
         // Check signature length
-        if (signature.Signature.Length is 0) errors.Add("FileSignature.Signature", "Signature cannot be empty.");
+        if (signature.Signature.Count is 0) errors.Add("FileSignature.Signature", "Signature cannot be empty.");
 
         // MediaType validation
         if (string.IsNullOrWhiteSpace(signature.MediaType))

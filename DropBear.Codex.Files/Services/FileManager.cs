@@ -1,5 +1,7 @@
+using System.Collections.ObjectModel;
 using System.Security.Cryptography;
 using DropBear.Codex.AppLogger.Interfaces;
+using DropBear.Codex.Core.ReturnTypes;
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.MessagePackChecker;
 using DropBear.Codex.Files.Models;
@@ -13,7 +15,6 @@ using DropBear.Codex.Validation.ReturnTypes;
 using DropBear.Codex.Validation.StrategyValidation.Interfaces;
 using MessagePack;
 using ServiceStack.Text;
-using static System.BitConverter;
 
 namespace DropBear.Codex.Files.Services;
 
@@ -22,6 +23,20 @@ namespace DropBear.Codex.Files.Services;
 /// </summary>
 public class FileManager : IFileManager
 {
+    #region Field and Property Definitions
+
+    private const int HashSize = 32; // 256 bits
+
+    private static readonly MessagePackSerializerOptions Options = MessagePackSerializerOptions.Standard
+        .WithCompression(MessagePackCompression.Lz4BlockArray)
+        .WithSecurity(MessagePackSecurity.UntrustedData);
+
+    private readonly IAppLogger<FileManager> _logger;
+    private readonly IMessageTemplateManager _messageTemplateManager;
+    private readonly IStrategyValidator _strategyValidator;
+
+    #endregion
+
     #region Constructors
 
     /// <summary>
@@ -30,353 +45,36 @@ public class FileManager : IFileManager
     /// <param name="logger">The logger instance.</param>
     /// <param name="strategyValidator">The strategy validator instance.</param>
     /// <param name="messageTemplateManager">The message template manager instance.</param>
-    public FileManager(IAppLogger<FileManager> logger, IStrategyValidator strategyValidator, IMessageTemplateManager messageTemplateManager)
+    public FileManager(IAppLogger<FileManager> logger, IStrategyValidator strategyValidator,
+        IMessageTemplateManager messageTemplateManager)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _strategyValidator = strategyValidator ?? throw new ArgumentNullException(nameof(strategyValidator));
-        _messageTemplateManager = messageTemplateManager ?? throw new ArgumentNullException(nameof(messageTemplateManager));
-        
-        Initialize(); // Call the synchronous initialize method
+        _messageTemplateManager =
+            messageTemplateManager ?? throw new ArgumentNullException(nameof(messageTemplateManager));
+
+        // Assuming an asynchronous context is acceptable for your scenario
+        Task.Run(InitializeAsync).Wait();
     }
 
-    private void Initialize()
+    #region Initialization Methods
+
+    private async Task InitializeAsync()
     {
         _logger.LogInformation("Initializing FileManager...");
+        await RegisterValidationStrategiesAsync().ConfigureAwait(false);
+        await RegisterMessageTemplatesAsync().ConfigureAwait(false);
 
-        RegisterValidationStrategies();
-        RegisterMessageTemplates();
-
-        if (CheckMessagePackCompatibility().IsValid)
-        {
+        var compatibilityResult = await CheckMessagePackCompatibilityAsync().ConfigureAwait(false);
+        if (compatibilityResult.IsValid)
             _logger.LogInformation("MessagePack compatibility check passed.");
-        }
         else
-        {
             _logger.LogWarning("MessagePack compatibility check failed.");
-        }
 
         _logger.LogInformation("FileManager initialized.");
     }
-    #endregion
 
-    #region Public Methods
-
-    /// <summary>
-    ///     Creates a DropBear file asynchronously.
-    /// </summary>
-    /// <typeparam name="T">The type of content to include in the file.</typeparam>
-    /// <param name="name">The name of the file.</param>
-    /// <param name="content">The content to include in the file.</param>
-    /// <param name="compress">Whether to compress the file content.</param>
-    /// <param name="contentType">The type of content (optional).</param>
-    /// <param name="forceCreation">Whether to force the creation of the file even if validation fails.</param>
-    /// <returns>The created DropBear file.</returns>
-    public async Task<DropBearFile?> CreateFileAsync<T>(string name, T content, bool compress = false,
-        Type? contentType = null, bool forceCreation = false) where T : class
-    {
-        try
-        {
-            // Validate name
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                _logger.LogError("File name cannot be null or empty.");
-                return null;
-            }
-
-            name = Path.GetFileNameWithoutExtension(name); // Strip the file extension from name if it exists
-
-            ContentContainer? container;
-            // Handling based on contentType being provided or not
-            if (contentType != null)
-            {
-                var serializedContent = JsonSerializer.SerializeToString(content).GetBytes();
-                container = new ContentContainer(name, serializedContent,
-                    new ContentTypeInfo(contentType.Assembly.FullName!, contentType.Name, contentType.Namespace!),
-                    compress);
-            }
-            else
-            {
-                container = typeof(T) == typeof(byte[])
-                    ? new ContentContainer(typeof(byte[]), name,
-                        content as byte[] ?? throw new InvalidOperationException("Content cannot be null or empty."),
-                        compress)
-                    : new ContentContainer<T>(name, content, compress);
-            }
-
-            var dropBearFile =
-                new DropBearFile(name, Environment.UserName, compress);
-            dropBearFile.AddContent(container);
-
-            // Perform validation
-            var validationTasks = new List<Task<ValidationResult>>
-            {
-                _strategyValidator.ValidateAsync(dropBearFile)
-                // Add other validations as needed
-            };
-
-            var validationResults = await Task.WhenAll(validationTasks).ConfigureAwait(false);
-            var aggregatedResult = validationResults.Aggregate(ValidationResult.Success(),
-                (current, result) => current.Combine(result));
-
-            if (!aggregatedResult.IsValid)
-            {
-                var errors = string.Join("; ",
-                    aggregatedResult.Errors.Select(err => $"{err.Parameter}: {err.ErrorMessage}"));
-                _logger.LogWarning($"File validation failed: {errors}");
-
-                if (!forceCreation) // Return null if forceCreation is false and validation failed
-                    return null;
-            }
-
-            _logger.LogInformation("DropBear file created successfully.");
-            return dropBearFile; // Return the file regardless of validation if forceCreation is true
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError($"Error creating DropBear file: {ex.Message}");
-            return null;
-        }
-    }
-
-    /// <summary>
-    ///     Writes a DropBear file asynchronously.
-    /// </summary>
-    /// <param name="file">The DropBear file to write.</param>
-    /// <param name="filePath">The path where the file should be written.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    public async Task WriteFileAsync(DropBearFile file, string filePath)
-    {
-        // Sanitize and resolve the full file path and name
-        filePath = Path.GetFullPath(filePath);
-        var fullFilePathAndName =
-            Path.Combine(filePath, $"{file.Metadata.FileName}.{file.Header?.Signature.Extension}");
-
-        // Ensure the directory exists or create it
-        if (!Directory.Exists(filePath))
-        {
-            Directory.CreateDirectory(filePath);
-            _logger.LogInformation($"Directory created: {filePath}");
-        }
-
-        // Use FileMode.Create to overwrite any existing file or create a new one
-        try
-        {
-            var fileStream =
-                new FileStream(fullFilePathAndName, FileMode.Create, FileAccess.ReadWrite, FileShare.None);
-            await using (fileStream.ConfigureAwait(false))
-            {
-                // Serialize and write each component of DropBearFile with length prefix
-                await WriteComponentWithLengthPrefixAsync(fileStream, file.Header).ConfigureAwait(false);
-                await WriteComponentWithLengthPrefixAsync(fileStream, file.Metadata).ConfigureAwait(false);
-                await WriteComponentWithLengthPrefixAsync(fileStream, file.Content).ConfigureAwait(false);
-
-                // Calculate and append the verification hash
-                var fileHash = await ComputeAndAppendHashAsync(fileStream).ConfigureAwait(false);
-                _logger.LogInformation(
-                    $"DropBear file written and verified with hash: {BitConverter.ToString(fileHash)}");
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError($"Error writing DropBear file: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    ///     Reads a DropBear file asynchronously.
-    /// </summary>
-    /// <param name="filePath">The path to the DropBear file.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The read DropBear file.</returns>
-    public async Task<DropBearFile?> ReadFileAsync(string filePath, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            await using (fileStream.ConfigureAwait(false))
-            {
-                var componentDataWithLpe = new List<byte[]>(); // List to hold bytes of all components, including LPE
-                var componentDataWithoutLpe = new List<byte[]>(); // List to hold bytes of all components, excluding LPE
-
-                FileHeader? header = null;
-                while (fileStream.Position < fileStream.Length - HashSize)
-                {
-                    // Before reading the component, capture the position to calculate LPE size after.
-                    var startPosition = fileStream.Position;
-
-                    var component = await ReadWithLengthPrefixAsync(fileStream, cancellationToken)
-                        .ConfigureAwait(false);
-
-                    // Check if this is the first component to be read
-                    if (componentDataWithLpe.Count is 0 && componentDataWithoutLpe.Count is 0)
-                    {
-                        // Deserialize the header and validate the signature
-                        header = MessagePackSerializer.Deserialize<FileHeader>(component,
-                            cancellationToken: cancellationToken);
-                        if (!VerifyFileSignature(header.Signature.Signature))
-                        {
-                            _logger.LogError("File signature verification failed.");
-                            return null;
-                        }
-
-                        // Discard the header that was deserialized
-                        _ = header;
-                    }
-
-                    // Add component bytes to the without LPE list
-                    componentDataWithoutLpe.Add(component); // Add component bytes to the list
-
-                    // After reading, calculate the size of LPE based on the change in position.
-                    var endPosition = fileStream.Position;
-                    var lpeSize =
-                        (int)(endPosition - startPosition - component.Length); // Usually, this should be sizeof(int)
-
-                    // Recreate the component byte array including the LPE bytes
-                    var lpeBytes = GetBytes(component.Length);
-
-                    // Add the LPE bytes and component bytes to the with LPE list
-                    componentDataWithLpe.Add(lpeBytes.Concat(component)
-                        .ToArray()); // Combine LPE bytes with component bytes
-                }
-
-                // Compute hash excluding the verification hash at the end
-                var totalContentBytesForHash = componentDataWithLpe.SelectMany(b => b).ToArray();
-                var computedHash = await ComputeHashAsync(new MemoryStream(totalContentBytesForHash), cancellationToken)
-                    .ConfigureAwait(false);
-
-                // Read and verify the hash at the end of the file
-                var expectedHash = await ReadHashFromEndAsync(fileStream, HashSize, cancellationToken)
-                    .ConfigureAwait(false);
-
-                // Final null checks before proceeding
-                ArgumentNullException.ThrowIfNull(header);
-                ArgumentNullException.ThrowIfNull(componentDataWithoutLpe);
-                ArgumentNullException.ThrowIfNull(computedHash);
-                ArgumentNullException.ThrowIfNull(expectedHash);
-
-                if (VerifyHash(computedHash, expectedHash))
-                    return DeserializeDropBearFile(componentDataWithoutLpe, cancellationToken);
-
-
-                _logger.LogError("File hash verification failed.");
-                return null;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError($"Error reading DropBear file: {ex.Message}");
-            return null;
-        }
-    }
-
-    /// <summary>
-    ///     Deletes a file.
-    /// </summary>
-    /// <param name="filePath">The path to the file.</param>
-    public void DeleteFile(string filePath)
-    {
-        try
-        {
-            if (File.Exists(filePath))
-            {
-                File.Delete(filePath);
-                _logger.LogInformation($"File deleted successfully: {filePath}");
-            }
-            else
-            {
-                _logger.LogWarning($"File not found: {filePath}");
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError($"Error deleting file: {filePath}. Exception: {ex.Message}");
-            // You might want to rethrow the exception or handle it based on your application's needs
-        }
-    }
-
-    /// <summary>
-    ///     Updates a file with new content.
-    /// </summary>
-    /// <param name="filePath">The path to the file to update.</param>
-    /// <param name="newContent">The new content for the file.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    public async Task UpdateFile(string filePath, DropBearFile newContent,
-        CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            // Delete the existing file if it exists
-            if (File.Exists(filePath))
-            {
-                File.Delete(filePath);
-                _logger.LogInformation($"Existing file deleted: {filePath}");
-            }
-
-            // Write the new content to the file
-            await WriteFileAsync(newContent, Path.GetDirectoryName(filePath) ?? throw new InvalidOperationException()).ConfigureAwait(false);
-
-            _logger.LogInformation($"File updated successfully: {filePath}");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError($"Error updating file: {filePath}. Exception: {ex.Message}");
-            // Handle or rethrow the exception as necessary
-        }
-    }
-
-    #endregion
-
-    #region Private Methods
-
-    private bool VerifyFileSignature(byte[] actualSignature)
-    {
-        try
-        {
-            var expectedSignature =
-                new FileSignature().Signature; // Assuming a default constructor sets the expected signature
-            //Console.WriteLine(BitConverter.ToString(actualSignature));
-            //Console.WriteLine(BitConverter.ToString(expectedSignature));
-
-            return actualSignature.AsSpan().SequenceEqual(expectedSignature.AsSpan());
-        }
-        catch (Exception ex)
-        {
-            // Log the error or handle it as necessary
-            _logger.LogError($"Error verifying file signature: {ex.Message}");
-            return false;
-        }
-    }
-
-    private static DropBearFile DeserializeDropBearFile(IEnumerable<byte[]> componentData,
-        CancellationToken cancellationToken = default)
-    {
-        var listComponentBytes = componentData.ToList();
-        if (listComponentBytes.Count < 3) // Minimum expected: Header, FileMetadata and FileContent
-            throw new InvalidOperationException("Insufficient data to reconstruct DropBearFile.");
-
-        var header =
-            MessagePackSerializer.Deserialize<FileHeader>(listComponentBytes[0], cancellationToken: cancellationToken);
-
-        // Deserialize FileMetadata
-        var metadata =
-            MessagePackSerializer.Deserialize<FileMetadata>(listComponentBytes[1], _options, cancellationToken);
-
-        // Deserialize FileContent
-        // Ensure there is a third component; otherwise, handle as an error or a special case.
-        var content = listComponentBytes.Count > 1
-            ? MessagePackSerializer.Deserialize<FileContent>(listComponentBytes[2], _options, cancellationToken)
-            : throw new InvalidOperationException("FileContent data is missing.");
-
-        // Reconstruct the DropBearFile object with the deserialized components
-        var dropBearFile = DropBearFile.Reconstruct(header, metadata, content);
-        return dropBearFile;
-    }
-
-    private static bool VerifyHash(byte[] computedHash, byte[] expectedHash) =>
-        computedHash.AsSpan().SequenceEqual(expectedHash.AsSpan());
-
-    private void RegisterValidationStrategies()
+    private Task RegisterValidationStrategiesAsync()
     {
         // Register validation strategies with the StrategyValidator service
         _logger.LogInformation("Registering validation strategies.");
@@ -385,9 +83,10 @@ public class FileManager : IFileManager
         _strategyValidator.RegisterStrategy(new FileMetaDataValidationStrategy());
         _strategyValidator.RegisterStrategy(new DropBearFileValidationStrategy());
         _logger.LogInformation("Validation strategies registered successfully.");
+        return Task.CompletedTask;
     }
 
-    private void RegisterMessageTemplates()
+    private Task RegisterMessageTemplatesAsync()
     {
         // Register message templates with the MessageTemplateManager service
         _logger.LogInformation("Registering message templates.");
@@ -396,9 +95,10 @@ public class FileManager : IFileManager
             { "TestTemplateId", "Test template id: {0}" }
         });
         _logger.LogInformation("Message templates registered successfully.");
+        return Task.CompletedTask;
     }
 
-    private ValidationResult CheckMessagePackCompatibility()
+    private Task<ValidationResult> CheckMessagePackCompatibilityAsync()
     {
         // Check each class used in the DropBearFile and its subcomponents for compatibility with MessagePack serialization
         _logger.LogInformation("Checking type compatibility.");
@@ -415,7 +115,7 @@ public class FileManager : IFileManager
         var results = MessagePackCompatibilityAggregator.CheckTypes(typesToCheck);
         _logger.LogInformation("Type compatibility check completed.");
 
-        if (results.FailedTypes.Count is 0) return ValidationResult.Success();
+        if (results.FailedTypes.Count is 0) return Task.FromResult(ValidationResult.Success());
 
         var validationResult = ValidationResult.Success();
         foreach (var (type, reason) in results.FailedTypes)
@@ -424,38 +124,374 @@ public class FileManager : IFileManager
             _logger.LogError($"Type {type} failed compatibility check: {reason}");
         }
 
-        return validationResult;
+        return Task.FromResult(validationResult);
     }
 
+    #endregion
+
+    #endregion
+
+    #region Public Methods
+
     /// <summary>
-    ///     Serializes a component with MessagePack and writes it to a stream with a length prefix.
+    ///     Creates a DropBear file asynchronously.
     /// </summary>
-    /// <typeparam name="T">The type of the component to serialize.</typeparam>
-    /// <param name="fileStream">The stream to which the serialized component will be written.</param>
-    /// <param name="component">The component to serialize and write.</param>
-    /// <exception cref="InvalidOperationException">Thrown if the stream is not writable.</exception>
-    private static async Task WriteComponentWithLengthPrefixAsync<T>(Stream fileStream, T component)
+    /// <typeparam name="T">The type of content to include in the file.</typeparam>
+    /// <param name="name">The name of the file.</param>
+    /// <param name="content">The content to include in the file.</param>
+    /// <param name="compress">Whether to compress the file content.</param>
+    /// <param name="contentType">The type of content (optional).</param>
+    /// <param name="forceCreation">Whether to force the creation of the file even if validation fails.</param>
+    /// <returns>The created DropBear file.</returns>
+    public async Task<Result<DropBearFile>> CreateFileAsync<T>(string name, T content, bool compress = false,
+        Type? contentType = null, bool forceCreation = false) where T : class
     {
-        // Check if the file stream supports writing.
-        if (!fileStream.CanWrite)
-            throw new InvalidOperationException("The stream must be writable to perform write operations.");
+        if (!IsValidFileName(name))
+        {
+            _logger.LogError("File name cannot be null or empty.");
+            return Result<DropBearFile>.Failure("Invalid file name.");
+        }
+
+        name = Path.GetFileNameWithoutExtension(name); // Ensure name validity
 
         try
         {
-            // Serialize the component using MessagePack with provided options.
-            var componentBytes = MessagePackSerializer.Serialize(component, _options);
+            var container = CreateContentContainer(name, content, compress, contentType);
+            var dropBearFile = new DropBearFile(name, Environment.UserName, compress);
+            dropBearFile.AddContent(container);
 
-            // Write the serialized component bytes to the stream with a length prefix.
-            await WriteWithLengthPrefixAsync(fileStream, componentBytes).ConfigureAwait(false);
+            var validationResult = await ValidateFileAsync(dropBearFile).ConfigureAwait(false);
+            if (!validationResult.IsValid && !forceCreation)
+            {
+                _logger.LogWarning($"File validation failed: {validationResult.Errors}");
+                return Result<DropBearFile>.Failure("Validation failed.");
+            }
+
+            _logger.LogInformation("DropBear file created successfully.");
+            return Result<DropBearFile>.Success(dropBearFile);
         }
         catch (Exception ex)
         {
-            // Log or handle the error as appropriate for your application.
-            // For instance, you might want to log the error or throw a custom exception to indicate serialization or writing failed.
-            throw new InvalidOperationException($"Failed to serialize or write the component: {ex.Message}", ex);
+            _logger.LogError($"Error creating DropBear file: {ex.Message}");
+            return Result<DropBearFile>.Failure(ex.Message);
         }
     }
 
+    /// <summary>
+    ///     Writes a DropBear file asynchronously.
+    /// </summary>
+    /// <param name="file">The DropBear file to write.</param>
+    /// <param name="filePath">The path where the file should be written.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public async Task WriteFileAsync(DropBearFile file, string filePath)
+    {
+        try
+        {
+            // Validate and sanitize the filePath for security reasons.
+            filePath = SanitizeFilePath(filePath);
+            var fullFilePathAndName = ConstructFilePath(file, filePath);
+
+            EnsureDirectoryExists(filePath);
+
+            var fileStream = new FileStream(fullFilePathAndName, FileMode.Create, FileAccess.ReadWrite,
+                FileShare.None);
+            await using (fileStream.ConfigureAwait(false))
+            {
+                await SerializeDropBearFileComponents(file, fileStream).ConfigureAwait(false);
+                var fileHash = await ComputeAndAppendHashAsync(fileStream).ConfigureAwait(false);
+
+                _logger.LogInformation(
+                    $"DropBear file written and verified with hash: {BitConverter.ToString(fileHash)}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Error writing DropBear file: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    ///     Reads a DropBear file asynchronously.
+    /// </summary>
+    /// <param name="filePath">The path to the DropBear file.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The read DropBear file.</returns>
+    public async Task<Result<DropBearFile>> ReadFileAsync(string filePath,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            await using (fileStream.ConfigureAwait(false))
+            {
+                var readResult = await ReadComponentsAsync(fileStream, cancellationToken).ConfigureAwait(false);
+
+                if (!readResult.IsSuccess)
+                {
+                    _logger.LogError(readResult.ErrorMessage);
+                    return Result<DropBearFile>.Failure(readResult.ErrorMessage);
+                }
+
+                var verificationResult =
+                    await VerifyFileIntegrityAsync(fileStream, readResult.Components, cancellationToken)
+                        .ConfigureAwait(false);
+                if (!verificationResult)
+                {
+                    _logger.LogError("File hash verification failed.");
+                    return Result<DropBearFile>.Failure("File hash verification failed.");
+                }
+
+                _logger.LogInformation("DropBear file read successfully.");
+                return DeserializeDropBearFile(readResult.Components, cancellationToken);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Error reading DropBear file: {ex.Message}");
+            return Result<DropBearFile>.Failure($"Error reading DropBear file: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    ///     Deletes a file.
+    /// </summary>
+    /// <param name="filePath">The path to the file.</param>
+    public async Task DeleteFileAsync(string filePath)
+    {
+        try
+        {
+            if (File.Exists(filePath))
+            {
+                await Task.Run(() => File.Delete(filePath))
+                    .ConfigureAwait(false); // Consider Task.Run for minimal overhead async wrap
+                _logger.LogInformation($"File deleted successfully: {filePath}");
+            }
+            else
+            {
+                _logger.LogWarning($"File not found: {filePath}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Error deleting file: {filePath}. Exception: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    ///     Updates a file with new content.
+    /// </summary>
+    /// <param name="filePath">The path to the file to update.</param>
+    /// <param name="newContent">The new content for the file.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public async Task UpdateFileAsync(string filePath, DropBearFile newContent,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var directoryPath = Path.GetDirectoryName(filePath);
+            if (directoryPath is null) throw new InvalidOperationException("Invalid file path.");
+
+            // Delete the existing file if it exists
+            await DeleteFileAsync(filePath).ConfigureAwait(false); // Use async version for consistency
+
+            // Write the new content to the file
+            await WriteFileAsync(newContent, filePath).ConfigureAwait(false); // Directly use filePath for clarity
+
+            _logger.LogInformation($"File updated successfully: {filePath}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Error updating file: {filePath}. Exception: {ex.Message}");
+        }
+    }
+
+    #endregion
+
+    #region Protected and Internal Methods
+
+    #endregion
+
+    #region Private Methods
+
+    #region Container/Component Methods
+
+    private static ContentContainer CreateContentContainer<T>(string name, T content, bool compress, Type? contentType)
+        where T : class
+    {
+        if (contentType != null)
+        {
+            var serializedContent =
+                JsonSerializer.SerializeToString(content).GetBytes(); // Assuming these methods exist and are correct
+            return new ContentContainer(name, serializedContent,
+                new ContentTypeInfo(contentType.Assembly.FullName!, contentType.Name, contentType.Namespace!),
+                compress);
+        }
+
+        if (typeof(T) == typeof(byte[]))
+            return new ContentContainer(typeof(byte[]), name,
+                content as byte[] ?? throw new InvalidOperationException("Content cannot be null or empty."), compress);
+        return new ContentContainer<T>(name, content, compress);
+    }
+
+    private static async Task<(bool IsSuccess, List<byte[]> Components, string ErrorMessage)> ReadComponentsAsync(
+        Stream fileStream, CancellationToken cancellationToken)
+    {
+        var components = new List<byte[]>();
+        try
+        {
+            while (fileStream.Position < fileStream.Length - HashSize)
+            {
+                var component = await ReadWithLengthPrefixAsync(fileStream, cancellationToken).ConfigureAwait(false);
+                components.Add(component);
+            }
+
+            return (true, components, string.Empty);
+        }
+        catch (Exception ex)
+        {
+            return (false, components, $"Error reading components: {ex.Message}");
+        }
+    }
+
+    #endregion
+
+    #region Validation Methods
+
+    private static bool IsValidFileName(string? name) => !string.IsNullOrWhiteSpace(name);
+
+    private async Task<ValidationResult> ValidateFileAsync(DropBearFile file)
+    {
+        var validationTasks = new List<Task<ValidationResult>>
+        {
+            _strategyValidator.ValidateAsync(file)
+            // Add other validations as needed
+        };
+
+        var validationResults = await Task.WhenAll(validationTasks).ConfigureAwait(false);
+        var aggregatedResult = validationResults.Aggregate(ValidationResult.Success(),
+            (current, result) => current.Combine(result));
+
+        return aggregatedResult;
+    }
+
+    private static string SanitizeFilePath(string filePath) =>
+        // Implementation to sanitize and validate the filePath to prevent path traversal or other security issues.
+        Path.GetFullPath(filePath);
+
+    private void EnsureDirectoryExists(string filePath)
+    {
+        if (Directory.Exists(filePath)) return;
+        Directory.CreateDirectory(filePath);
+        _logger.LogInformation($"Directory created: {filePath}");
+    }
+
+    private static string ConstructFilePath(DropBearFile file, string filePath) =>
+        // Construct and return the full file path and name based on file metadata and header.
+        Path.Combine(filePath, $"{file.Metadata.FileName}.{file.Header?.Signature.Extension}");
+
+    #endregion
+
+    #region Serialization/Deserialization Methods
+
+    /// <summary>
+    ///     Deserializes the components of a DropBearFile from byte arrays.
+    /// </summary>
+    /// <param name="componentData">The byte array components representing the DropBearFile.</param>
+    /// <param name="cancellationToken">Optional. A token to monitor for cancellation requests.</param>
+    /// <returns>A reconstructed DropBearFile object.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     Thrown when the data is insufficient to reconstruct the DropBearFile or
+    ///     specific components are missing.
+    /// </exception>
+    private static DropBearFile DeserializeDropBearFile(IEnumerable<byte[]> componentData,
+        CancellationToken cancellationToken = default)
+    {
+        var components = componentData as byte[][] ?? componentData.ToArray();
+        if (components.Length < 3) // Minimum expected: Header, FileMetadata, and FileContent
+            throw new InvalidOperationException("Insufficient data to reconstruct DropBearFile.");
+
+        // Deserialize components using the generic method
+        var header = DeserializeComponent<FileHeader>(components[0], cancellationToken);
+        var metadata = DeserializeComponent<FileMetadata>(components[1], cancellationToken);
+        var content = components.Length > 2
+            ? DeserializeComponent<FileContent>(components[2], cancellationToken)
+            : throw new InvalidOperationException("FileContent data is missing.");
+
+        return DropBearFile.Reconstruct(header, metadata, content);
+    }
+
+    /// <summary>
+    ///     Generic method for deserializing a component from a byte array.
+    /// </summary>
+    /// <typeparam name="T">The type of the component to deserialize.</typeparam>
+    /// <param name="data">The byte array representing the component.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>The deserialized component.</returns>
+    private static T DeserializeComponent<T>(byte[] data, CancellationToken cancellationToken = default) =>
+        // Ensure proper configuration of _options to mitigate deserialization risks.
+        MessagePackSerializer.Deserialize<T>(data, Options, cancellationToken);
+
+    private static async Task SerializeDropBearFileComponents(DropBearFile file, Stream fileStream)
+    {
+        // Serialize and write each component of DropBearFile with length prefix.
+        await WriteComponentWithLengthPrefixAsync(fileStream, file.Header).ConfigureAwait(false);
+        await WriteComponentWithLengthPrefixAsync(fileStream, file.Metadata).ConfigureAwait(false);
+        await WriteComponentWithLengthPrefixAsync(fileStream, file.Content).ConfigureAwait(false);
+    }
+
+    private static Result<DropBearFile> DeserializeDropBearFile(IList<byte[]> components,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Assume a method exists on DropBearFile that can reconstruct it from its components
+            var file = DropBearFile.Reconstruct(new Collection<byte[]>(components), cancellationToken);
+            return Result<DropBearFile>.Success(file);
+        }
+        catch (Exception ex)
+        {
+            return Result<DropBearFile>.Failure($"Deserialization failed: {ex.Message}");
+        }
+    }
+
+    #endregion
+
+    #region Hashing Methods
+
+    private static bool VerifyHash(byte[] computedHash, byte[] expectedHash) =>
+        computedHash.AsSpan().SequenceEqual(expectedHash.AsSpan());
+
+    /// <summary>
+    ///     Computes a SHA256 hash of the contents of a stream.
+    /// </summary>
+    /// <param name="stream">The stream to compute the hash from.</param>
+    /// <param name="cancellationToken">Cancellation token for the async operation.</param>
+    /// <returns>The computed hash as a byte array.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if the stream does not support reading or other errors occur.</exception>
+    private static async Task<byte[]> ComputeHashAsync(Stream stream, CancellationToken cancellationToken = default)
+    {
+        if (!stream.CanRead)
+            throw new InvalidOperationException("Stream must be readable to compute the hash.");
+
+        using var hasher = SHA256.Create();
+        byte[] hash;
+        try
+        {
+            hash = await hasher.ComputeHashAsync(stream, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw; // Rethrow cancellation exceptions without wrapping.
+        }
+        catch (Exception ex)
+        {
+            // Consider logging here if applicable.
+            throw new InvalidOperationException($"An error occurred while computing the hash: {ex.Message}", ex);
+        }
+
+        return hash;
+    }
 
     /// <summary>
     ///     Computes and appends a SHA256 hash to the provided stream, then returns the hash.
@@ -508,81 +544,88 @@ public class FileManager : IFileManager
         return hash; // Return the binary hash.
     }
 
-
-    /// <summary>
-    ///     Computes a SHA256 hash of the contents of a stream.
-    /// </summary>
-    /// <param name="stream">The stream to compute the hash from.</param>
-    /// <param name="cancellationToken">Cancellation token for the async operation.</param>
-    /// <returns>The computed hash as a byte array.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if the stream does not support reading.</exception>
-    private static async Task<byte[]> ComputeHashAsync(Stream stream, CancellationToken cancellationToken = default)
+    private static async Task<bool> VerifyFileIntegrityAsync(
+        Stream fileStream, IEnumerable<byte[]> components, CancellationToken cancellationToken)
     {
-        if (!stream.CanRead) throw new InvalidOperationException("Stream must be readable to compute the hash.");
-
         try
         {
-            using var hasher = SHA256.Create();
-            var hash = await hasher.ComputeHashAsync(stream, cancellationToken).ConfigureAwait(false);
-            return hash;
+            // Reconstruct the stream to include LPE bytes, if necessary
+            var reconstructedStream = ReconstructStreamWithLPE(components);
+        
+            // Compute hash on the reconstructed stream
+            var computedHash = await ComputeHashAsync(reconstructedStream, cancellationToken)
+                .ConfigureAwait(false);
+
+            // Rewind the fileStream to ensure it can be read from the beginning
+            if (fileStream.CanSeek)
+            {
+                fileStream.Seek(0, SeekOrigin.Begin);
+            }
+
+            // Read the expected hash from the end of the original file stream
+            var expectedHash = await ReadHashFromEndAsync(fileStream, HashSize, cancellationToken)
+                .ConfigureAwait(false);
+
+            return VerifyHash(computedHash, expectedHash);
         }
-        catch (Exception ex)
+        catch
         {
-            // This captures any exceptions that might occur during the hash computation,
-            // such as issues reading the stream. You might want to log this exception or handle it based on your application's needs.
-            throw new InvalidOperationException($"An error occurred while computing the hash: {ex.Message}", ex);
+            // Consider logging the exception or specific handling here
+            return false;
         }
     }
 
-
-    /// <summary>
-    ///     Writes data to a stream with a length prefix.
-    /// </summary>
-    /// <param name="stream">The stream to write to.</param>
-    /// <param name="data">The data to write.</param>
-    /// <exception cref="InvalidOperationException">Thrown if the stream is not writable.</exception>
-    private static async Task WriteWithLengthPrefixAsync(Stream stream, byte[] data)
+    // ReSharper disable once InconsistentNaming
+    private static MemoryStream ReconstructStreamWithLPE(IEnumerable<byte[]> components)
     {
-        if (!stream.CanWrite) throw new InvalidOperationException("Stream must be writable.");
+        var memoryStream = new MemoryStream();
 
-        var lengthPrefix = GetBytes(data.Length);
-        await stream.WriteAsync(lengthPrefix).ConfigureAwait(false);
-        await stream.WriteAsync(data).ConfigureAwait(false);
+        // Example: Assuming LPE involves prefixing each component with its length
+        foreach (var component in components)
+        {
+            // Example: Convert component length to bytes and write to stream (adjust based on actual LPE format)
+            var lengthPrefix = BitConverter.GetBytes(component.Length);
+            memoryStream.Write(lengthPrefix, 0, lengthPrefix.Length);
+
+            // Write the actual component
+            memoryStream.Write(component, 0, component.Length);
+        }
+
+        // Rewind the stream to allow reading from the beginning
+        memoryStream.Position = 0;
+
+        return memoryStream;
     }
 
+
+    #endregion
+
+    #region Stream Methods
+
     /// <summary>
-    ///     Reads data from a stream that was written with a length prefix.
+    ///     Reads a hash from the end of the stream.
     /// </summary>
-    /// <param name="stream">The stream to read from.</param>
+    /// <param name="stream">The stream from which to read the hash.</param>
+    /// <param name="hashSize">The size of the hash in bytes.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The data read from the stream.</returns>
+    /// <returns>The hash read from the end of the stream.</returns>
     /// <exception cref="InvalidOperationException">
-    ///     Thrown if the stream does not support seeking or if declared data length is
-    ///     invalid.
+    ///     Thrown if the stream is not seekable or is too short for the expected hash
+    ///     size.
     /// </exception>
-    /// <exception cref="EndOfStreamException">Thrown if there are not enough bytes left in the stream for the data.</exception>
-    private static async Task<byte[]> ReadWithLengthPrefixAsync(Stream stream,
+    private static async Task<byte[]> ReadHashFromEndAsync(Stream stream, int hashSize,
         CancellationToken cancellationToken = default)
     {
-        if (!stream.CanRead) throw new InvalidOperationException("Stream must be readable.");
+        if (!stream.CanSeek) throw new InvalidOperationException("Stream must support seeking.");
 
-        if (stream.Length - stream.Position < sizeof(int))
-            throw new EndOfStreamException("Not enough bytes in the stream for a length prefix.");
+        if (stream.Length < hashSize) throw new InvalidOperationException("Stream is shorter than expected hash size.");
 
-        var lengthPrefix = new byte[sizeof(int)];
-        await ReadExactAsync(stream, lengthPrefix, cancellationToken).ConfigureAwait(false);
+        stream.Seek(-hashSize, SeekOrigin.End);
+        var hash = new byte[hashSize];
+        await ReadExactAsync(stream, hash, cancellationToken).ConfigureAwait(false);
 
-        var dataLength = ToInt32(lengthPrefix, 0);
-        if (dataLength < 0 || stream.Length - stream.Position < dataLength)
-            throw new InvalidOperationException(
-                "Invalid data length or not enough bytes in the stream for the declared data length.");
-
-        var data = new byte[dataLength];
-        await ReadExactAsync(stream, data, cancellationToken).ConfigureAwait(false);
-
-        return data;
+        return hash;
     }
-
 
     /// <summary>
     ///     Reads an exact number of bytes from a stream into a buffer, respecting the specified cancellation token.
@@ -615,45 +658,134 @@ public class FileManager : IFileManager
         }
     }
 
-
     /// <summary>
-    ///     Reads a hash from the end of the stream.
+    ///     Reads data from a stream that was written with a length prefix.
     /// </summary>
-    /// <param name="stream">The stream from which to read the hash.</param>
-    /// <param name="hashSize">The size of the hash in bytes.</param>
+    /// <param name="stream">The stream to read from.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The hash read from the end of the stream.</returns>
+    /// <returns>The data read from the stream.</returns>
     /// <exception cref="InvalidOperationException">
-    ///     Thrown if the stream is not seekable or is too short for the expected hash
-    ///     size.
+    ///     Thrown if the stream does not support seeking or if declared data length is
+    ///     invalid.
     /// </exception>
-    private static async Task<byte[]> ReadHashFromEndAsync(Stream stream, int hashSize,
+    /// <exception cref="EndOfStreamException">Thrown if there are not enough bytes left in the stream for the data.</exception>
+    private static async Task<byte[]> ReadWithLengthPrefixAsync(Stream stream,
         CancellationToken cancellationToken = default)
     {
-        if (!stream.CanSeek) throw new InvalidOperationException("Stream must support seeking.");
+        if (!stream.CanRead) throw new InvalidOperationException("Stream must be readable.");
 
-        if (stream.Length < hashSize) throw new InvalidOperationException("Stream is shorter than expected hash size.");
+        if (stream.Length - stream.Position < sizeof(int))
+            throw new EndOfStreamException("Not enough bytes in the stream for a length prefix.");
 
-        stream.Seek(-hashSize, SeekOrigin.End);
-        var hash = new byte[hashSize];
-        await ReadExactAsync(stream, hash, cancellationToken).ConfigureAwait(false);
+        var lengthPrefix = new byte[sizeof(int)];
+        await ReadExactAsync(stream, lengthPrefix, cancellationToken).ConfigureAwait(false);
 
-        return hash;
+        var dataLength = BitConverter.ToInt32(lengthPrefix, 0);
+        if (dataLength < 0 || stream.Length - stream.Position < dataLength)
+            throw new InvalidOperationException(
+                "Invalid data length or not enough bytes in the stream for the declared data length.");
+
+        var data = new byte[dataLength];
+        await ReadExactAsync(stream, data, cancellationToken).ConfigureAwait(false);
+
+        return data;
+    }
+
+    /// <summary>
+    ///     Writes data to a stream with a length prefix.
+    /// </summary>
+    /// <param name="stream">The stream to write to.</param>
+    /// <param name="data">The data to write, preceded by its length as a 4-byte integer.</param>
+    /// <remarks>
+    ///     This method ensures data integrity by prefixing the data with its length, allowing precise reading of the expected
+    ///     data amount.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown if the stream does not support writing.</exception>
+    private static async Task WriteWithLengthPrefixAsync(Stream stream, byte[] data)
+    {
+        if (!stream.CanWrite) throw new InvalidOperationException("Stream must be writable.");
+
+        // Convert the length of the data to a byte array and write it to the stream.
+        var lengthPrefix = BitConverter.GetBytes(data.Length);
+        await stream.WriteAsync(lengthPrefix).ConfigureAwait(false);
+        await stream.WriteAsync(data).ConfigureAwait(false);
+    }
+
+
+    /// <summary>
+    ///     Serializes a component with MessagePack and writes it to a stream with a length prefix.
+    /// </summary>
+    /// <typeparam name="T">The type of the component to serialize.</typeparam>
+    /// <param name="fileStream">The stream to which the serialized component will be written.</param>
+    /// <param name="component">The component to serialize and write.</param>
+    /// <exception cref="InvalidOperationException">Thrown if the stream is not writable.</exception>
+    private static async Task WriteComponentWithLengthPrefixAsync<T>(Stream fileStream, T component)
+    {
+        // Check if the file stream supports writing.
+        if (!fileStream.CanWrite)
+            throw new InvalidOperationException("The stream must be writable to perform write operations.");
+
+        try
+        {
+            // Serialize the component using MessagePack with provided options.
+            var componentBytes = MessagePackSerializer.Serialize(component, Options);
+
+            // Write the serialized component bytes to the stream with a length prefix.
+            await WriteWithLengthPrefixAsync(fileStream, componentBytes).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // Log or handle the error as appropriate for your application.
+            // For instance, you might want to log the error or throw a custom exception to indicate serialization or writing failed.
+            throw new InvalidOperationException($"Failed to serialize or write the component: {ex.Message}", ex);
+        }
     }
 
     #endregion
 
-    #region Fields and Properties
+    #region Signature Verification
 
-    private const int HashSize = 32; // 256 bits
+    /// <summary>
+    ///     Verifies if the provided signature matches the expected file signature.
+    /// </summary>
+    /// <param name="actualSignature">The actual signature to verify.</param>
+    /// <returns>true if the actual signature matches the expected signature; otherwise, false.</returns>
+    /// <remarks>
+    ///     Logs an error and returns false if an unexpected issue occurs during verification.
+    /// </remarks>
+    private bool VerifyFileSignature(byte[] actualSignature)
+    {
+        try
+        {
+            var expectedSignature = new FileSignature().Signature; // Assuming this is ReadOnlyCollection<byte>
+            var expectedSignatureArray = expectedSignature.ToArray(); // Convert to array
 
-    private static readonly MessagePackSerializerOptions _options = MessagePackSerializerOptions.Standard
-        .WithCompression(MessagePackCompression.Lz4BlockArray)
-        .WithSecurity(MessagePackSecurity.UntrustedData);
+            // Console.WriteLine for debugging purposes
+            // Console.WriteLine(BitConverter.ToString(actualSignature));
+            // Console.WriteLine(BitConverter.ToString(expectedSignatureArray));
 
-    private readonly IAppLogger<FileManager> _logger;
-    private readonly IMessageTemplateManager _messageTemplateManager;
-    private readonly IStrategyValidator _strategyValidator;
+            return actualSignature.AsSpan().SequenceEqual(expectedSignatureArray.AsSpan());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Error verifying file signature: {ex.Message}");
+            return false;
+        }
+    }
+
+    #endregion
+
+    #endregion
+
+    #region Events and Handlers
+
+    #endregion
+
+    #region Overrides
+
+    #endregion
+
+    #region Nested Classes
 
     #endregion
 }

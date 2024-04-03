@@ -1,55 +1,51 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
+using DropBear.Codex.Core.ReturnTypes;
 using DropBear.Codex.Files.Models;
 
-namespace DropBear.Codex.Files.Interfaces
+namespace DropBear.Codex.Files.Interfaces;
+
+public interface IFileManager
 {
     /// <summary>
-    /// Interface for managing files.
+    ///     Creates a DropBear file asynchronously.
     /// </summary>
-    public interface IFileManager
-    {
-        /// <summary>
-        /// Creates a new file asynchronously.
-        /// </summary>
-        /// <typeparam name="T">The type of content to be stored in the file.</typeparam>
-        /// <param name="name">The name of the file.</param>
-        /// <param name="content">The content of the file.</param>
-        /// <param name="compress">Specifies whether to compress the content.</param>
-        /// <param name="contentType">The type of content.</param>
-        /// <param name="forceCreation">Specifies whether to forcefully create the file.</param>
-        /// <returns>A task representing the asynchronous operation. The task result contains the created file.</returns>
-        Task<DropBearFile?> CreateFileAsync<T>(string name, T content, bool compress = false,
-            Type? contentType = null, bool forceCreation = false) where T : class;
+    /// <typeparam name="T">The type of content to include in the file.</typeparam>
+    /// <param name="name">The name of the file.</param>
+    /// <param name="content">The content to include in the file.</param>
+    /// <param name="compress">Whether to compress the file content.</param>
+    /// <param name="contentType">The type of content (optional).</param>
+    /// <param name="forceCreation">Whether to force the creation of the file even if validation fails.</param>
+    /// <returns>The created DropBear file.</returns>
+    Task<Result<DropBearFile>> CreateFileAsync<T>(string name, T content, bool compress = false,
+        Type? contentType = null, bool forceCreation = false) where T : class;
 
-        /// <summary>
-        /// Writes a file asynchronously.
-        /// </summary>
-        /// <param name="file">The file to write.</param>
-        /// <param name="filePath">The path to write the file to.</param>
-        Task WriteFileAsync(DropBearFile file, string filePath);
+    /// <summary>
+    ///     Writes a DropBear file asynchronously.
+    /// </summary>
+    /// <param name="file">The DropBear file to write.</param>
+    /// <param name="filePath">The path where the file should be written.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    Task WriteFileAsync(DropBearFile file, string filePath);
 
-        /// <summary>
-        /// Reads a file asynchronously.
-        /// </summary>
-        /// <param name="filePath">The path of the file to read.</param>
-        /// <param name="cancellationToken">The cancellation token to cancel operation.</param>
-        /// <returns>A task representing the asynchronous operation. The task result contains the read file.</returns>
-        Task<DropBearFile?> ReadFileAsync(string filePath, CancellationToken cancellationToken = default);
+    /// <summary>
+    ///     Reads a DropBear file asynchronously.
+    /// </summary>
+    /// <param name="filePath">The path to the DropBear file.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The read DropBear file.</returns>
+    Task<Result<DropBearFile>> ReadFileAsync(string filePath, CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Deletes a file.
-        /// </summary>
-        /// <param name="filePath">The path of the file to delete.</param>
-        void DeleteFile(string filePath);
+    /// <summary>
+    ///     Deletes a file.
+    /// </summary>
+    /// <param name="filePath">The path to the file.</param>
+    Task DeleteFileAsync(string filePath);
 
-        /// <summary>
-        /// Updates a file asynchronously.
-        /// </summary>
-        /// <param name="filePath">The path of the file to update.</param>
-        /// <param name="newContent">The new content of the file.</param>
-        /// <param name="cancellationToken">The cancellation token to cancel operation.</param>
-        Task UpdateFile(string filePath, DropBearFile newContent, CancellationToken cancellationToken = default);
-    }
+    /// <summary>
+    ///     Updates a file with new content.
+    /// </summary>
+    /// <param name="filePath">The path to the file to update.</param>
+    /// <param name="newContent">The new content for the file.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    Task UpdateFileAsync(string filePath, DropBearFile newContent, CancellationToken cancellationToken = default);
 }

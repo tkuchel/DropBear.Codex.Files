@@ -26,7 +26,7 @@ public static class ServiceCollectionExtensions
 
         // Add validation services
         services.AddValidationServices();
-        
+
         // Add MessageTemplateManager service
         services.AddMessageTemplateManager();
 

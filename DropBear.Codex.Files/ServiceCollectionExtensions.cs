@@ -31,6 +31,6 @@ public static class ServiceCollectionExtensions
         services.AddMessageTemplateManager();
 
         // Add file manager service
-        services.AddSingleton<IFileManager, FileManager>();
+        services.AddScoped<IFileManager,FileManager>();
     }
 }

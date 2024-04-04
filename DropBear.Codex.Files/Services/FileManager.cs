@@ -34,6 +34,7 @@ public class FileManager : IFileManager
     private readonly IAppLogger<FileManager> _logger;
     private readonly IMessageTemplateManager _messageTemplateManager;
     private readonly IStrategyValidator _strategyValidator;
+    private readonly RecyclableMemoryStreamManager _recyclableMemoryStreamManager = new();
 
     #endregion
 
@@ -187,28 +188,40 @@ public class FileManager : IFileManager
     {
         try
         {
-            // Validate and sanitize the filePath for security reasons.
             filePath = SanitizeFilePath(filePath);
             var fullFilePathAndName = ConstructFilePath(file, filePath);
 
             EnsureDirectoryExists(filePath);
 
-            var fileStream = new FileStream(fullFilePathAndName, FileMode.Create, FileAccess.ReadWrite,
-                FileShare.None);
-            await using (fileStream.ConfigureAwait(false))
+            // Instead of writing directly to a FileStream, use a RecyclableMemoryStream for the initial processing.
+            using (var memoryStream = _recyclableMemoryStreamManager.GetStream("FileManager.WriteFileAsync"))
             {
-                await SerializeDropBearFileComponents(file, fileStream).ConfigureAwait(false);
-                var fileHash = await ComputeAndAppendHashAsync(fileStream).ConfigureAwait(false);
+                await SerializeDropBearFileComponents(file, memoryStream).ConfigureAwait(false);
 
-                _logger.LogInformation(
-                    $"DropBear file written and verified with hash: {BitConverter.ToString(fileHash)}");
+                // After serializing the file components into the memory stream, compute and append the hash.
+                memoryStream.Position = 0; // Ensure the stream is at the beginning before computing the hash.
+                var fileHash = await ComputeAndAppendHashAsync(memoryStream).ConfigureAwait(false);
+                _logger.LogInformation($"Computed file hash: {BitConverter.ToString(fileHash)}");
+
+                // Reset the stream position after computing the hash, before writing to the file.
+                memoryStream.Position = 0;
+
+                // Write from the memory stream to the actual file.
+                using (var fileStream =
+                       new FileStream(fullFilePathAndName, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    await memoryStream.CopyToAsync(fileStream).ConfigureAwait(false);
+                }
+
+                _logger.LogInformation("DropBear file written successfully with RecyclableMemoryStream.");
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError($"Error writing DropBear file: {ex.Message}");
+            _logger.LogError($"Error writing DropBear file with RecyclableMemoryStream: {ex.Message}");
         }
     }
+
 
     /// <summary>
     ///     Reads a DropBear file asynchronously.
@@ -221,36 +234,51 @@ public class FileManager : IFileManager
     {
         try
         {
-            var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            await using (fileStream.ConfigureAwait(false))
+            // Validate and sanitize the filePath for security reasons.
+            filePath = SanitizeFilePath(filePath);
+
+            // Use FileStream to open the file for reading.
+            using (var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
-                var readResult = await ReadComponentsAsync(fileStream, cancellationToken).ConfigureAwait(false);
-
-                if (!readResult.IsSuccess)
+                // Instead of reading the entire file into a standard MemoryStream,
+                // use a RecyclableMemoryStream for the file reading process.
+                using (var memoryStream = _recyclableMemoryStreamManager.GetStream("FileManager.ReadFileAsync"))
                 {
-                    _logger.LogError(readResult.ErrorMessage);
-                    return Result<DropBearFile>.Failure(readResult.ErrorMessage);
-                }
+                    // Copy the FileStream to the RecyclableMemoryStream.
+                    await fileStream.CopyToAsync(memoryStream, cancellationToken).ConfigureAwait(false);
 
-                var verificationResult =
-                    await VerifyFileIntegrityAsync(fileStream, readResult.Components, cancellationToken)
-                        .ConfigureAwait(false);
-                if (!verificationResult)
-                {
-                    _logger.LogError("File hash verification failed.");
-                    return Result<DropBearFile>.Failure("File hash verification failed.");
-                }
+                    // After copying, reset the position of the memory stream to start reading from the beginning.
+                    memoryStream.Position = 0;
 
-                _logger.LogInformation("DropBear file read successfully.");
-                return DeserializeDropBearFile(readResult.Components, cancellationToken);
+                    // Read components and perform file integrity verification within the memory stream.
+                    var readResult = await ReadComponentsAsync(memoryStream, cancellationToken).ConfigureAwait(false);
+                    if (!readResult.IsSuccess)
+                    {
+                        _logger.LogError(readResult.ErrorMessage);
+                        return Result<DropBearFile>.Failure(readResult.ErrorMessage);
+                    }
+
+                    var verificationResult =
+                        await VerifyFileIntegrityAsync(memoryStream, readResult.Components, cancellationToken)
+                            .ConfigureAwait(false);
+                    if (!verificationResult)
+                    {
+                        _logger.LogError("File hash verification failed.");
+                        return Result<DropBearFile>.Failure("File hash verification failed.");
+                    }
+
+                    _logger.LogInformation("DropBear file read successfully with RecyclableMemoryStream.");
+                    return DeserializeDropBearFile(readResult.Components, cancellationToken);
+                }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError($"Error reading DropBear file: {ex.Message}");
+            _logger.LogError($"Error reading DropBear file with RecyclableMemoryStream: {ex.Message}");
             return Result<DropBearFile>.Failure($"Error reading DropBear file: {ex.Message}");
         }
     }
+
 
     /// <summary>
     ///     Deletes a file.
@@ -553,16 +581,13 @@ public class FileManager : IFileManager
         {
             // Reconstruct the stream to include LPE bytes, if necessary
             var reconstructedStream = ReconstructStreamWithLPE(components);
-        
+
             // Compute hash on the reconstructed stream
             var computedHash = await ComputeHashAsync(reconstructedStream, cancellationToken)
                 .ConfigureAwait(false);
 
             // Rewind the fileStream to ensure it can be read from the beginning
-            if (fileStream.CanSeek)
-            {
-                fileStream.Seek(0, SeekOrigin.Begin);
-            }
+            if (fileStream.CanSeek) fileStream.Seek(0, SeekOrigin.Begin);
 
             // Read the expected hash from the end of the original file stream
             var expectedHash = await ReadHashFromEndAsync(fileStream, HashSize, cancellationToken)
@@ -598,7 +623,6 @@ public class FileManager : IFileManager
 
         return memoryStream;
     }
-
 
     #endregion
 

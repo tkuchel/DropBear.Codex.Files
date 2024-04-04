@@ -1,11 +1,12 @@
 using Blake3;
+using DropBear.Codex.Files.Interfaces;
 using K4os.Compression.LZ4.Streams;
 using MessagePack;
 
 namespace DropBear.Codex.Files.Models.FileComponents.SubComponents;
 
 [MessagePackObject]
-public class ContentContainer
+public class ContentContainer : IContentContainer
 {
     [Obsolete("For MessagePack", false)]
     public ContentContainer()

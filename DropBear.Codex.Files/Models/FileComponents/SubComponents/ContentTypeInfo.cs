@@ -16,6 +16,10 @@ public class ContentTypeInfo
         TypeName = string.Empty;
         NameSpace = string.Empty;
     }
+    
+    public ContentTypeInfo(Type type) : this(type.Assembly.GetName().Name, type.Name, type.Namespace)
+    {
+    }
 
     public ContentTypeInfo(string assemblyName, string typeName, string nameSpace)
     {

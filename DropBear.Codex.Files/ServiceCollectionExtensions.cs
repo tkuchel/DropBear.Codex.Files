@@ -1,9 +1,12 @@
 ﻿using DropBear.Codex.AppLogger.Extensions;
+using DropBear.Codex.Files.Factory;
+using DropBear.Codex.Files.Factory.Implementations;
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Services;
 using DropBear.Codex.Utilities.Extensions;
 using DropBear.Codex.Validation;
 using Microsoft.Extensions.DependencyInjection;
+using ServiceStack.Text;
 
 namespace DropBear.Codex.Files;
 
@@ -29,8 +32,16 @@ public static class ServiceCollectionExtensions
 
         // Add MessageTemplateManager service
         services.AddMessageTemplateManager();
+        
+        // Add RecyclableMemoryStreamManager service
+        services.AddSingleton<RecyclableMemoryStreamManager>(); // If not already registered
+        services.AddTransient<IContentContainerFactory, ContentContainerFactory>();
+        services.AddTransient<IFileCreator, FileCreator>();
+        services.AddTransient<IFileReader, FileReader>();
+        services.AddTransient<IFileDeleter, FileDeleter>();
+        services.AddTransient<IFileUpdater, FileUpdater>();
+        services.AddTransient<IFileValidator, FileValidator>();
+        services.AddTransient<IFileIntegrityChecker, FileIntegrityChecker>();
 
-        // Add file manager service
-        services.AddScoped<IFileManager,FileManager>();
     }
 }

@@ -11,7 +11,7 @@ public class StringContentContainer : IContentContainer
 {
     private readonly RecyclableMemoryStreamManager _streamManager;
 
-    public StringContentContainer(RecyclableMemoryStreamManager streamManager, string name, string? content,
+    public StringContentContainer(RecyclableMemoryStreamManager? streamManager, string name, string? content,
         bool compress)
     {
         _streamManager = streamManager ?? throw new ArgumentNullException(nameof(streamManager));

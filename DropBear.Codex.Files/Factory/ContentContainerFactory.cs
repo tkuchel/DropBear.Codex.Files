@@ -4,9 +4,9 @@ using ServiceStack.Text;
 
 namespace DropBear.Codex.Files.Factory {
     public class ContentContainerFactory : IContentContainerFactory {
-        private readonly RecyclableMemoryStreamManager _streamManager;
+        private readonly RecyclableMemoryStreamManager? _streamManager;
         
-        public ContentContainerFactory(RecyclableMemoryStreamManager streamManager) {
+        public ContentContainerFactory(RecyclableMemoryStreamManager? streamManager) {
             _streamManager = streamManager;
         }
 

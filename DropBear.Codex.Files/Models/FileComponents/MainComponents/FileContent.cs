@@ -1,7 +1,7 @@
 using System.Collections.ObjectModel;
 using Blake3;
 using DropBear.Codex.Files.Exceptions;
-using DropBear.Codex.Files.Models.FileComponents.SubComponents;
+using DropBear.Codex.Files.Interfaces;
 using MessagePack;
 
 namespace DropBear.Codex.Files.Models.FileComponents.MainComponents;
@@ -9,32 +9,20 @@ namespace DropBear.Codex.Files.Models.FileComponents.MainComponents;
 [MessagePackObject]
 public class FileContent
 {
-    [Key(0)] public Collection<ContentContainer> Contents { get; } = new();
+    [Key(0)] public Collection<IContentContainer> Contents { get; } = new();
 
-    public void UpdateCompressionStateForAllContents(bool compress)
-    {
-        foreach (var content in Contents)
-            // Assuming ContentContainer has methods for compression state update
-            if (content.IsCompressed != compress)
-            {
-                var newContentData = compress
-                    ? ContentContainer.CompressContent(content.Content)
-                    : ContentContainer.DecompressContent(content.Content);
-                content.UpdateContent(newContentData, compress);
-            }
-    }
 
     /// <summary>
     ///     Adds content to the file content.
     /// </summary>
     /// <param name="content">The content to add.</param>
-    public void AddContent(ContentContainer content) => Contents.Add(content);
+    public void AddContent(IContentContainer content) => Contents.Add(content);
 
     /// <summary>
     ///     Removes content from the file content.
     /// </summary>
     /// <param name="content">The content to remove.</param>
-    public void RemoveContent(ContentContainer content) => Contents.Remove(content);
+    public void RemoveContent(IContentContainer content) => Contents.Remove(content);
 
     /// <summary>
     ///     Clears all content from the file content.
@@ -46,7 +34,7 @@ public class FileContent
     /// </summary>
     /// <param name="content">The content container to verify.</param>
     /// <returns>True if the hash is valid, otherwise false.</returns>
-    private static bool VerifyContentHash(ContentContainer content)
+    private static bool VerifyContentHash(IContentContainer content)
     {
         var computedHash = Hasher.Hash(content.Content).ToString();
         return content.Hash == computedHash;
@@ -57,7 +45,7 @@ public class FileContent
     /// </summary>
     /// <typeparam name="T">The type of content container to retrieve.</typeparam>
     /// <returns>An enumerable collection of content containers of the specified type.</returns>
-    public IEnumerable<ContentContainer> GetAllContents<T>() =>
+    public IEnumerable<IContentContainer> GetAllContents<T>() =>
         Contents.Where(c => c.ContentType.GetContentType() == typeof(T));
 
     /// <summary>
@@ -65,14 +53,14 @@ public class FileContent
     /// </summary>
     /// <typeparam name="T">The type of content container to retrieve.</typeparam>
     /// <returns>The content container of the specified type.</returns>
-    public ContentContainer GetContent<T>() =>
+    public IContentContainer GetContent<T>() =>
         GetAllContents<T>().FirstOrDefault() ?? throw new FileContentNotFoundException();
 
     /// <summary>
     ///     Gets the content container of any type.
     /// </summary>
     /// <returns>The content container of any type.</returns>
-    public ContentContainer GetContent() =>
+    public IContentContainer GetContent() =>
         Contents.FirstOrDefault() ?? throw new FileContentNotFoundException();
 
     /// <summary>
@@ -101,7 +89,7 @@ public class FileContent
     /// </summary>
     /// <typeparam name="T">The type of content container to find.</typeparam>
     /// <returns>The content container of the specified type.</returns>
-    public ContentContainer FindContainerForType<T>() =>
+    public IContentContainer FindContainerForType<T>() =>
         Contents.FirstOrDefault(c => c.ContentType.GetContentType() == typeof(T)) ??
         throw new FileContentNotFoundException();
 
@@ -111,7 +99,7 @@ public class FileContent
     /// <typeparam name="T">The type of content container to find.</typeparam>
     /// <param name="name">The name of the content container.</param>
     /// <returns>The content container of the specified type and name.</returns>
-    public ContentContainer FindContainerForTypeAndName<T>(string name) =>
+    public IContentContainer FindContainerForTypeAndName<T>(string name) =>
         Contents.FirstOrDefault(c => c.ContentType.GetContentType() == typeof(T) && c.Name == name) ??
         throw new FileContentNotFoundException();
 
@@ -122,7 +110,7 @@ public class FileContent
     /// <param name="name">The name of the content container.</param>
     /// <param name="hash">The hash of the content container.</param>
     /// <returns>The content container of the specified type, name, and hash.</returns>
-    public ContentContainer FindContainerForTypeAndNameAndHash<T>(string name, string hash) =>
+    public IContentContainer FindContainerForTypeAndNameAndHash<T>(string name, string hash) =>
         Contents.FirstOrDefault(c => c.ContentType.GetContentType() == typeof(T) && c.Name == name && c.Hash == hash) ??
         throw new FileContentNotFoundException();
 

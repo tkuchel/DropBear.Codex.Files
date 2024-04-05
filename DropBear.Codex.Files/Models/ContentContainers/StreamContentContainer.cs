@@ -12,7 +12,7 @@ public class StreamContentContainer : IContentContainer
 {
     private readonly RecyclableMemoryStreamManager _streamManager;
 
-    public StreamContentContainer(RecyclableMemoryStreamManager streamManager, string name, Stream? contentStream,
+    public StreamContentContainer(RecyclableMemoryStreamManager? streamManager, string name, Stream? contentStream,
         bool compress)
     {
         _streamManager = streamManager ?? throw new ArgumentNullException(nameof(streamManager));

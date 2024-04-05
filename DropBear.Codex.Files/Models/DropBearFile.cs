@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using DropBear.Codex.Files.Exceptions;
+using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Models.FileComponents.MainComponents;
 using DropBear.Codex.Files.Models.FileComponents.SubComponents;
 using MessagePack;
@@ -41,7 +42,7 @@ public class DropBearFile
 
     [Key(2)] public FileContent Content { get; private set; }
 
-    [Key(3)] public bool CompressContent { get; private set; }
+    [Key(3)] public bool CompressContent { get; }
 
     private string GetFileName() => Metadata.FileName;
 
@@ -52,7 +53,7 @@ public class DropBearFile
     /// <summary>
     ///     Adds content to the file, automatically handling compression based on file settings.
     /// </summary>
-    public void AddContent(ContentContainer content)
+    public void AddContent(IContentContainer content)
     {
         Content.AddContent(content);
         Metadata.UpdateWithNewContent(content);
@@ -66,18 +67,9 @@ public class DropBearFile
     }
 
     /// <summary>
-    ///     Updates the compression state for all content, recompressing if necessary.
-    /// </summary>
-    public void UpdateCompressionState(bool compress)
-    {
-        CompressContent = compress;
-        Content.UpdateCompressionStateForAllContents(compress);
-    }
-
-    /// <summary>
     ///     Verifies the integrity of the DropBear file, ensuring metadata and content hashes are consistent.
     /// </summary>
-    public bool VerifyDropBearFileIntegrity() => VerifyMetadata() && UpdateAndVerifyContentHashes();
+    public bool VerifyDropBearFileIntegrity() => VerifyMetadata() && VerifyContent();
 
     private bool VerifyMetadata()
     {
@@ -85,13 +77,15 @@ public class DropBearFile
         return Metadata.FileSize == totalContentSize;
     }
 
-    private bool UpdateAndVerifyContentHashes()
+    private bool VerifyContent()
     {
         foreach (var content in Content.Contents)
         {
-            var updatedHash = content.UpdateContentHash();
-            if (!content.VerifyContentHash()) return false;
-            Metadata.ContentTypeVerificationHashes[content.ContentType.TypeName] = updatedHash;
+            if (content is not ContentContainer container)
+                return false;
+            if (container.VerifyContentHash())
+                continue;
+            return false;
         }
 
         return true;

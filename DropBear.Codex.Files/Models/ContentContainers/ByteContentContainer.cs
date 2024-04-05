@@ -12,7 +12,7 @@ public class ByteContentContainer : IContentContainer
 {
     private readonly RecyclableMemoryStreamManager _streamManager;
 
-    public ByteContentContainer(RecyclableMemoryStreamManager streamManager, string name, byte[]? content,
+    public ByteContentContainer(RecyclableMemoryStreamManager? streamManager, string name, byte[]? content,
         bool compress)
     {
         _streamManager = streamManager ?? throw new ArgumentNullException(nameof(streamManager));

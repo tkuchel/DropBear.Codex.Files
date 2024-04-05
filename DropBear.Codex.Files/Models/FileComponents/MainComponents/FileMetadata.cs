@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Blake3;
+using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Models.FileComponents.SubComponents;
 using MessagePack;
 
@@ -28,7 +29,7 @@ public class FileMetadata
     public Dictionary<string, string> CustomMetadata { get; } =
         new(StringComparer.OrdinalIgnoreCase);
 
-    public void UpdateWithNewContent(ContentContainer content)
+    public void UpdateWithNewContent(IContentContainer content)
     {
         UpdateModifiedDate();
         FileSize += content.Length;

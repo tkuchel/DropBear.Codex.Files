@@ -1,9 +1,11 @@
 using System.Collections.ObjectModel;
+using System.Text;
 using DropBear.Codex.Files.Exceptions;
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Models.FileComponents.MainComponents;
 using DropBear.Codex.Files.Models.FileComponents.SubComponents;
 using MessagePack;
+using ServiceStack.Text;
 
 namespace DropBear.Codex.Files.Models;
 
@@ -103,16 +105,21 @@ public class DropBearFile
         return dropBearFile;
     }
 
-    public static DropBearFile Reconstruct(Collection<byte[]> components, CancellationToken cancellationToken = default)
+    public static DropBearFile Reconstruct(bool useJsonSerialization, Collection<byte[]> components,
+        CancellationToken cancellationToken = default)
     {
         if (components.Count < 3)
             throw new ArgumentException("Insufficient components for reconstruction.", nameof(components));
 
-        var header = MessagePackSerializer.Deserialize<FileHeader>(components[0], cancellationToken: cancellationToken);
-        var metadata =
-            MessagePackSerializer.Deserialize<FileMetadata>(components[1], cancellationToken: cancellationToken);
-        var content =
-            MessagePackSerializer.Deserialize<FileContent>(components[2], cancellationToken: cancellationToken);
+        var header = useJsonSerialization
+            ? JsonSerializer.DeserializeFromString<FileHeader>(Encoding.UTF8.GetString(components[0]))
+            : MessagePackSerializer.Deserialize<FileHeader>(components[0], cancellationToken: cancellationToken);
+        var metadata = useJsonSerialization
+            ? JsonSerializer.DeserializeFromString<FileMetadata>(Encoding.UTF8.GetString(components[1]))
+            : MessagePackSerializer.Deserialize<FileMetadata>(components[1], cancellationToken: cancellationToken);
+        var content = useJsonSerialization
+            ? JsonSerializer.DeserializeFromString<FileContent>(Encoding.UTF8.GetString(components[2]))
+            : MessagePackSerializer.Deserialize<FileContent>(components[2], cancellationToken: cancellationToken);
 
         return Reconstruct(header, metadata, content);
     }

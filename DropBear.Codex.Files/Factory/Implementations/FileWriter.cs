@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using DropBear.Codex.Core.ReturnTypes;
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Models;
+using DropBear.Codex.Files.Utils;
 using DropBear.Codex.Utilities.Helpers;
 using MessagePack;
 using Microsoft.Extensions.Logging;
@@ -43,20 +44,16 @@ public class FileWriter : IFileWriter, IDisposable
         try
         {
             // Validate file path
-            if (string.IsNullOrWhiteSpace(filePath))
+            if (FileUtility.IsValidFileName(filePath))
                 return Result.Failure("File path cannot be null or empty");
 
             // Check if the directory exists
-            var directory = Path.GetDirectoryName(filePath);
-            if (!Directory.Exists(directory))
-                if (directory is not null)
-                    Directory.CreateDirectory(directory);
+            var fullFilePathAndName = FileUtility.GetFilePath(file, filePath);
 
-            // Serialize the content to JSON or MessagePack
+ 
+            // Check if the stream manager is null
             if (s_streamManager is null)
                 throw new InvalidOperationException("Stream manager cannot be null");
-
-            var fullFilePathAndName = ConstructFilePath(file, filePath);
 
             // Create a stream to write the file
             using var memoryStream = s_streamManager.GetStream("FileWriter");
@@ -90,16 +87,89 @@ public class FileWriter : IFileWriter, IDisposable
         }
     }
 
-    public IFileWriter WithJsonSerialization(bool serializeToJson)
+    public async Task<Result<byte[]>> WriteFileToByteArrayAsync(DropBearFile file)
     {
-        s_useJsonSerialization = serializeToJson;
+        try
+        {
+            // Check if the stream manager is null
+            if (s_streamManager is null)
+                throw new InvalidOperationException("Stream manager cannot be null");
+
+            // Create a stream to write the file
+            using var memoryStream = s_streamManager.GetStream("FileWriter");
+            await SerializeDropBearFileComponents(file, memoryStream).ConfigureAwait(false);
+
+            // After serializing the file components into the memory stream, compute and append the hash.
+            memoryStream.Position = 0; // Ensure the stream is at the beginning before computing the hash.
+            var fileHash = await ComputeAndAppendHashAsync(memoryStream).ConfigureAwait(false);
+            _logger.ZLogInformation($"Computed file hash: {BitConverter.ToString(fileHash)}");
+
+            // Reset the stream position after computing the hash, before writing to the file.
+            memoryStream.Position = 0;
+
+            // Return the memory stream as a byte array
+            return Result<byte[]>.Success(memoryStream.ToArray());
+        }
+        catch (Exception e)
+        {
+            _logger.ZLogError(e, $"Failed to write file to byte array");
+            return Result<byte[]>.Failure(e.Message);
+        }
+    }
+
+    public IFileWriter WithJsonSerialization()
+    {
+        s_useJsonSerialization = true;
         return this;
     }
 
-    public IFileWriter WithMessagePackSerialization(bool serializeToMessagePack)
+    public IFileWriter WithMessagePackSerialization()
     {
-        s_useJsonSerialization = !serializeToMessagePack;
+        s_useJsonSerialization = false;
         return this;
+    }
+
+    public async Task<Result> WriteByteArrayToFileAsync(byte[] bytes,string fileName, string filePath)
+    {
+        try
+        {
+            // Validate file path
+            if (FileUtility.IsValidFileName(filePath))
+                return Result.Failure("File path cannot be null or empty");
+ 
+            // Construct the full file path and name
+            var fullFilePathAndNameWithExtension = FileUtility.GetFilePath(fileName, filePath);
+
+            
+            // Check if the stream manager is null
+            if (s_streamManager is null)
+                throw new InvalidOperationException("Stream manager cannot be null");
+
+            // Create a stream to write the file
+            using var memoryStream = s_streamManager.GetStream("FileWriter");
+            await memoryStream.WriteAsync(bytes).ConfigureAwait(false);
+
+            // Reset the stream position 
+            memoryStream.Position = 0;
+
+            // Write from the memory stream to the actual file.
+            var fileStream =
+                new FileStream(fullFilePathAndNameWithExtension, FileMode.Create, FileAccess.Write, FileShare.None);
+
+            // Write from the memory stream to the actual file.
+            await using (fileStream.ConfigureAwait(false))
+            {
+                await memoryStream.CopyToAsync(fileStream).ConfigureAwait(false);
+
+                _logger.ZLogInformation($"Successfully wrote file to {fullFilePathAndNameWithExtension}");
+                return Result.Success();
+            }
+        }
+        catch (Exception e)
+        {
+            _logger.ZLogError(e, $"Failed to write file to {filePath}");
+            return Result.Failure(e.Message);
+        }
     }
 
     private static async Task<byte[]> ComputeAndAppendHashAsync(Stream stream,
@@ -145,9 +215,6 @@ public class FileWriter : IFileWriter, IDisposable
         return hash; // Return the binary hash.
     }
 
-    private static string ConstructFilePath(DropBearFile file, string filePath) =>
-        // Construct and return the full file path and name based on file metadata and header.
-        Path.Combine(filePath, $"{file.Metadata.FileName}.{file.Header?.Signature.Extension}");
 
     private static async Task SerializeDropBearFileComponents(DropBearFile file, Stream fileStream)
     {

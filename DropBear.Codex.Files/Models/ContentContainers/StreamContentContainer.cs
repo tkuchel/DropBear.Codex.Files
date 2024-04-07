@@ -1,31 +1,30 @@
+using System;
+using System.IO;
 using System.Security.Cryptography;
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Models.FileComponents.SubComponents;
 using FastRsync.Compression;
 using ServiceStack.Text;
 
-// Assuming this namespace for RecyclableMemoryStreamManager
-
 namespace DropBear.Codex.Files.Models.ContentContainers;
 
 public class StreamContentContainer : IContentContainer
 {
     private readonly RecyclableMemoryStreamManager _streamManager;
+    private string? _lazyHash;
 
-    public StreamContentContainer(RecyclableMemoryStreamManager? streamManager, string name, Stream? contentStream,
-        bool compress)
+    public StreamContentContainer(RecyclableMemoryStreamManager? streamManager, string name, Stream? contentStream, bool compress)
     {
         _streamManager = streamManager ?? throw new ArgumentNullException(nameof(streamManager));
-        Name = name;
+        Name = name ?? throw new ArgumentNullException(nameof(name));
         IsCompressed = compress;
-        Content = CompressIfNeeded(ReadStream(contentStream) ?? Array.Empty<byte>(), compress);
+        Content = contentStream != null ? CompressIfNeeded(ReadStream(contentStream), compress) : Array.Empty<byte>();
         Length = Content.Length;
         ContentType = new ContentTypeInfo(typeof(byte[]));
-        Hash = GenerateContentHash();
     }
 
     public string Name { get; }
-    public string Hash { get; }
+    public string Hash => _lazyHash ??= GenerateContentHash();
 
     public byte[] Content { get; }
     public int Length { get; }
@@ -34,38 +33,51 @@ public class StreamContentContainer : IContentContainer
 
     public bool VerifyContentHash(bool recomputeHash = false)
     {
-        if (!recomputeHash) return true; // No need to recompute, assume hash is valid
+        if (!recomputeHash) return true;
 
         var newHash = GenerateContentHash();
-        return Hash == newHash; // Compare the newly generated hash with the existing one
+        return Hash == newHash;
     }
 
     private string GenerateContentHash()
     {
-        using var stream = _streamManager.GetStream();
-        stream.Write(Content, 0, Content.Length);
-        stream.Position = 0; // Reset position after writing to calculate hash correctly.
-        using var sha256Hasher = SHA256.Create();
-        var hash = sha256Hasher.ComputeHash(stream);
-        return Convert.ToBase64String(hash);
+        try
+        {
+            using var stream = _streamManager.GetStream();
+            stream.Write(Content, 0, Content.Length);
+            stream.Position = 0;
+            using var sha256Hasher = SHA256.Create();
+            var hash = sha256Hasher.ComputeHash(stream);
+            return Convert.ToBase64String(hash);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException("Failed to generate content hash.", ex);
+        }
     }
 
     private byte[] CompressIfNeeded(byte[] content, bool compress)
     {
         if (!compress) return content;
 
-        using var sourceStream = new MemoryStream(content);
-        using var compressedStream = _streamManager.GetStream();
-        // Assuming FastRsync.Compression.GZip.Compress is compatible with streams
-        GZip.Compress(sourceStream, compressedStream); // Check the compress method signature
-        compressedStream.Position = 0;
-        return ReadStream(compressedStream);
+        try
+        {
+            using var sourceStream = new MemoryStream(content);
+            using var compressedStream = _streamManager.GetStream();
+            GZip.Compress(sourceStream, compressedStream);
+            compressedStream.Position = 0;
+            return ReadStream(compressedStream);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException("Failed to compress content.", ex);
+        }
     }
 
     private byte[] ReadStream(Stream input)
     {
-        using var memoryStream = _streamManager.GetStream(); // Use RecyclableMemoryStream
+        using var memoryStream = _streamManager.GetStream();
         input.CopyTo(memoryStream);
-        return memoryStream.ToArray(); // Returns the underlying buffer without additional allocations
+        return memoryStream.ToArray();
     }
 }

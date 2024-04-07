@@ -3,6 +3,10 @@ using DropBear.Codex.Files.Models.ContentContainers;
 using ServiceStack.Text;
 
 namespace DropBear.Codex.Files.Factory {
+    
+    /// <summary>
+    /// Factory for creating various types of content containers.
+    /// </summary>
     public class ContentContainerFactory : IContentContainerFactory {
         private readonly RecyclableMemoryStreamManager? _streamManager;
         

@@ -5,7 +5,9 @@ namespace DropBear.Codex.Files.Interfaces;
 
 public interface IFileWriter
 {
-    IFileWriter WithJsonSerialization(bool serializeToJson);
-    IFileWriter WithMessagePackSerialization(bool serializeToMessagePack);
+    IFileWriter WithJsonSerialization();
+    IFileWriter WithMessagePackSerialization();
     Task<Result> WriteFileAsync(DropBearFile file, string filePath);
+    Task<Result<byte[]>> WriteFileToByteArrayAsync(DropBearFile file);
+    Task<Result> WriteByteArrayToFileAsync(byte[] bytes,string fileName, string filePath);
 }

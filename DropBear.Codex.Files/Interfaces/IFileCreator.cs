@@ -5,7 +5,7 @@ namespace DropBear.Codex.Files.Interfaces;
 
 public interface IFileCreator
 {
-    IFileCreator WithCompression(bool compress);
+    IFileCreator WithCompression();
 
-    Task<Result<DropBearFile>> CreateAsync<T>(string name, T content, bool compress = false, bool forceCreation = false) where T : class;
+    Task<Result<DropBearFile>> CreateAsync<T>(string name, T content, bool forceCreation = false) where T : class;
 }

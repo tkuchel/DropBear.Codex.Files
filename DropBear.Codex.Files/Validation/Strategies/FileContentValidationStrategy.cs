@@ -1,3 +1,4 @@
+using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Models.FileComponents.MainComponents;
 using DropBear.Codex.Files.Models.FileComponents.SubComponents;
 using DropBear.Codex.Utilities.Hashing;
@@ -47,7 +48,7 @@ public class FileContentValidationStrategy : IValidationStrategy<FileContent>
     /// <param name="content">The content container to validate.</param>
     /// <param name="index">The index of the content container within the FileContent's contents collection.</param>
     /// <param name="errors">A collection to which any validation errors should be added.</param>
-    private void ValidateContentContainer(ContentContainer content, int index, Dictionary<string, string> errors)
+    private void ValidateContentContainer(IContentContainer content, int index, Dictionary<string, string> errors)
     {
         // Validate the data is not null or empty
         if (content.Content.Length is 0)

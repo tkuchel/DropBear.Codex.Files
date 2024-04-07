@@ -14,6 +14,7 @@ using DropBear.Codex.Utilities.MessageTemplates;
 using DropBear.Codex.Validation.ReturnTypes;
 using DropBear.Codex.Validation.StrategyValidation.Interfaces;
 using MessagePack;
+using Microsoft.Extensions.Logging;
 using ServiceStack.Text;
 
 namespace DropBear.Codex.Files.Services;
@@ -31,7 +32,7 @@ public class FileManager : IFileManager
         .WithCompression(MessagePackCompression.Lz4BlockArray)
         .WithSecurity(MessagePackSecurity.UntrustedData);
 
-    private readonly IAppLogger<FileManager> _logger;
+    private readonly ILogger<FileManager> _logger;
     private readonly IMessageTemplateManager _messageTemplateManager;
     private readonly IStrategyValidator _strategyValidator;
     private readonly RecyclableMemoryStreamManager _recyclableMemoryStreamManager = new();
@@ -46,7 +47,7 @@ public class FileManager : IFileManager
     /// <param name="logger">The logger instance.</param>
     /// <param name="strategyValidator">The strategy validator instance.</param>
     /// <param name="messageTemplateManager">The message template manager instance.</param>
-    public FileManager(IAppLogger<FileManager> logger, IStrategyValidator strategyValidator,
+    public FileManager(ILogger<FileManager> logger, IStrategyValidator strategyValidator,
         IMessageTemplateManager messageTemplateManager)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));

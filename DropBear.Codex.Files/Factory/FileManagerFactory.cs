@@ -23,7 +23,7 @@ public static class FileManagerFactory
     private static StrategyValidator? s_strategyValidator;
     private static ILoggerFactory? s_loggerFactory;
     private static MessageTemplateManager? s_messageTemplateManager;
-    private static ILogger? s_logger; // Added logger for initialization results
+    private static ILogger? s_logger;
 
     // Factory methods
     public static IFileCreator FileCreator()
@@ -59,10 +59,11 @@ public static class FileManagerFactory
     public static IFileDeltaUtility FileDeltaUtility()
     {
         FileManagerInitializer.EnsureInitialized(s_loggerFactory);
-        return new FileDeltaUtility(s_streamManager, s_loggerFactory);
+        return new FileDeltaUpdater(s_streamManager, s_loggerFactory);
     }
 
-    private class FileManagerInitializer
+    // ReSharper disable once ClassNeverInstantiated.Local
+    private sealed record FileManagerInitializer
     {
         private static bool s_isInitialized;
         private static readonly object InitLock = new();
@@ -73,6 +74,7 @@ public static class FileManagerFactory
             lock (InitLock)
             {
                 if (s_isInitialized) return;
+                s_logger = loggerFactory?.CreateLogger<FileManagerInitializer>() ?? throw new InvalidOperationException("LoggerFactory is null.");
                 InitializeComponents(loggerFactory);
                 s_isInitialized = true;
             }
@@ -82,15 +84,21 @@ public static class FileManagerFactory
         {
             try
             {
+                if(s_logger is null) throw new InvalidOperationException("Logger is null.");
+                s_logger.ZLogInformation($"Initializing FileManagerFactory components.");
                 s_streamManager = new RecyclableMemoryStreamManager();
                 s_strategyValidator = new StrategyValidator();
                 s_messageTemplateManager = new MessageTemplateManager();
                 s_loggerFactory = loggerFactory ?? BuildDefaultLoggerFactory();
-                s_logger = s_loggerFactory!.CreateLogger<FileManagerFactoryLogger>();
-
+                
+                s_logger.ZLogInformation($"FileManagerFactory components initialized successfully.");
+                s_logger.ZLogInformation($"Registering validation strategies and message templates.");
+                
                 RegisterValidationStrategies();
                 RegisterMessageTemplates();
 
+                s_logger.ZLogInformation($"Checking MessagePack compatibility for DropBearFile and subcomponents.");
+                
                 var compatibilityResult = CheckMessagePackCompatibility();
                 LogInitializationResults(compatibilityResult);
             }
@@ -113,12 +121,13 @@ public static class FileManagerFactory
 
         private static void RegisterValidationStrategies()
         {
+            if(s_logger is null) throw new InvalidOperationException("Logger is null.");
             // Register validation strategies with the StrategyValidator service
-
             s_strategyValidator?.RegisterStrategy(new FileContentValidationStrategy());
             s_strategyValidator?.RegisterStrategy(new FileHeaderValidationStrategy());
             s_strategyValidator?.RegisterStrategy(new FileMetaDataValidationStrategy());
             s_strategyValidator?.RegisterStrategy(new DropBearFileValidationStrategy());
+            s_logger.ZLogInformation($"Validation strategies registered successfully.");
         }
 
         private static void RegisterMessageTemplates() =>
@@ -130,7 +139,9 @@ public static class FileManagerFactory
 
         private static ValidationResult CheckMessagePackCompatibility()
         {
+            if(s_logger is null) throw new InvalidOperationException("Logger is null.");
             // Check each class used in the DropBearFile and its subcomponents for compatibility with MessagePack serialization
+            s_logger.ZLogInformation($"Checking MessagePack compatibility for DropBearFile and subcomponents.");
             var typesToCheck = new List<Type>
             {
                 typeof(ContentContainer),
@@ -147,7 +158,7 @@ public static class FileManagerFactory
 
             var validationResult = ValidationResult.Success();
             foreach (var (type, reason) in results.FailedTypes) validationResult.AddError(type, reason);
-
+            
             return validationResult;
         }
 
@@ -160,5 +171,6 @@ public static class FileManagerFactory
         }
     }
 
-    private class FileManagerFactoryLogger();
+    // ReSharper disable once ClassNeverInstantiated.Local
+    private sealed record FileManagerFactoryLogger();
 }

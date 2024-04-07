@@ -33,7 +33,7 @@ public class ContentContainer<T> : ContentContainer
         try
         {
             // Assuming Content is uncompressed; if compressed, decompression should occur before deserialization
-            return JsonSerializer.DeserializeFromString<T>(Content.FromUtf8Bytes());
+            return JsonSerializer.DeserializeFromString<T>(Content().FromUtf8Bytes());
         }
         catch (Exception ex)
         {

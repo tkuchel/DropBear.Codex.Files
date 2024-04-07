@@ -1,29 +1,27 @@
+using DropBear.Codex.Core.ReturnTypes;
 using DropBear.Codex.Files.Interfaces;
 using Microsoft.Extensions.Logging;
 using ZLogger;
+using ILoggerFactory = DropBear.Codex.AppLogger.Interfaces.ILoggerFactory;
 
 namespace DropBear.Codex.Files.Factory.Implementations;
 
-public class FileDeleter : IFileDeleter, IDisposable
+public class FileDeleter : IFileDeleter
 {
     private readonly ILogger<FileDeleter> _logger;
-    private bool _disposed;
 
-    public FileDeleter(ILogger<FileDeleter> logger) =>
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-
-    public void Dispose()
+    public FileDeleter(ILoggerFactory? loggerFactory)
     {
-        Dispose(true);
-        GC.SuppressFinalize(this);
+        ArgumentNullException.ThrowIfNull(loggerFactory);
+        _logger = loggerFactory.CreateLogger<FileDeleter>();
     }
 
-    public async Task DeleteFileAsync(string filePath)
+    public async Task<Result> DeleteFileAsync(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
         {
             _logger.ZLogWarning($"Attempted to delete a file with a null or empty path.");
-            return;
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
         }
 
         try
@@ -32,28 +30,18 @@ public class FileDeleter : IFileDeleter, IDisposable
             {
                 await Task.Run(() => File.Delete(filePath)).ConfigureAwait(false);
                 _logger.ZLogInformation($"File deleted successfully: {filePath}");
+                return Result.Success();
             }
             else
             {
                 _logger.ZLogWarning($"File not found: {filePath}");
+                return Result.Failure("File not found.");
             }
         }
         catch (Exception ex)
         {
             _logger.ZLogError(ex, $"Error deleting file: {filePath}");
-        }
-    }
-
-    protected virtual void Dispose(bool disposing)
-    {
-        if (!_disposed)
-        {
-            if (disposing)
-            {
-                // Managed resource clean-up
-            }
-
-            _disposed = true;
+            return Result.Failure(ex.Message);
         }
     }
 }

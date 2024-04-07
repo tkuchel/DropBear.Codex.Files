@@ -6,7 +6,7 @@ public interface IContentContainer
 {
     string Name { get; }
     string Hash { get; }
-    byte[] Content { get; }
+    byte[] Content();
     int Length { get; }
     ContentTypeInfo ContentType { get; }
     bool IsCompressed { get; }

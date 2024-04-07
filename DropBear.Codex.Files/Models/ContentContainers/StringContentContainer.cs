@@ -19,15 +19,19 @@ public class StringContentContainer : IContentContainer
         Name = name ?? throw new ArgumentNullException(nameof(name));
         IsCompressed = compress;
         var contentBytes = string.IsNullOrEmpty(content) ? Array.Empty<byte>() : Encoding.UTF8.GetBytes(content);
-        Content = CompressIfNeeded(contentBytes, compress);
-        Length = Content.Length;
+        _content = CompressIfNeeded(contentBytes, compress);
+        Length = _content.Length;
         ContentType = new ContentTypeInfo(typeof(byte[]));
     }
+
+    private byte[] _content { get; }
+    public byte[] Content() => _content;
 
     public string Name { get; }
     public string Hash => _lazyHash ??= GenerateContentHash();
 
-    public byte[] Content { get; }
+    
+
     public int Length { get; }
     public ContentTypeInfo ContentType { get; }
     public bool IsCompressed { get; }
@@ -45,7 +49,7 @@ public class StringContentContainer : IContentContainer
         try
         {
             using var stream = _streamManager.GetStream();
-            stream.Write(Content, 0, Content.Length);
+            stream.Write(_content, 0, _content.Length);
             stream.Position = 0;
             using var sha256Hasher = SHA256.Create();
             var hash = sha256Hasher.ComputeHash(stream);

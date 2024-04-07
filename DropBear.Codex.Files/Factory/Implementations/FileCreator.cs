@@ -1,4 +1,5 @@
 using DropBear.Codex.Core.ReturnTypes;
+using DropBear.Codex.Files.ContentContainerStrategies;
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Models;
 using DropBear.Codex.Files.Models.ContentContainers;
@@ -7,29 +8,35 @@ using DropBear.Codex.Validation.StrategyValidation.Interfaces;
 using Microsoft.Extensions.Logging;
 using ServiceStack.Text;
 using ZLogger;
+using ILoggerFactory = DropBear.Codex.AppLogger.Interfaces.ILoggerFactory;
 
 namespace DropBear.Codex.Files.Factory.Implementations;
 
-public sealed class FileCreator : IFileCreator, IDisposable
+public sealed class FileCreator : IFileCreator
 {
     private readonly ILogger<FileCreator> _logger;
+    private readonly ILoggerFactory _loggerFactory;
     private readonly IStrategyValidator _strategyValidator;
     private readonly RecyclableMemoryStreamManager _streamManager;
-    private bool _disposed;
+    private readonly List<IContentContainerStrategy> _strategies;
     private bool _useCompression;
 
-    public FileCreator(RecyclableMemoryStreamManager streamManager, ILogger<FileCreator> logger,
-        IStrategyValidator strategyValidator)
+    public FileCreator(RecyclableMemoryStreamManager? streamManager, ILoggerFactory? loggerFactory,
+        IStrategyValidator? strategyValidator)
     {
         _streamManager = streamManager ?? throw new ArgumentNullException(nameof(streamManager));
         _strategyValidator = strategyValidator ?? throw new ArgumentNullException(nameof(strategyValidator));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    }
-
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
+        _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
+        _logger = loggerFactory.CreateLogger<FileCreator>();
+        
+        // Initialize strategies
+        _strategies = new List<IContentContainerStrategy>
+        {
+            new StringContentContainerStrategy(),
+            new ByteContentContainerStrategy(),
+            new StreamContentContainerStrategy(),
+            // Add other strategies here
+        };
     }
 
     public IFileCreator WithCompression()
@@ -78,17 +85,8 @@ public sealed class FileCreator : IFileCreator, IDisposable
     private IContentContainer? CreateContentContainer<T>(string name, T content, bool compress, Type type)
         where T : class
     {
-        switch (type)
-        {
-            case { } t when t == typeof(string):
-                return new StringContentContainer(_streamManager, name, content as string, compress);
-            case { } t when t == typeof(byte[]):
-                return new ByteContentContainer(_streamManager, name, content as byte[], compress);
-            case { } t when t == typeof(Stream):
-                return new StreamContentContainer(_streamManager, name, content as Stream, compress);
-            default:
-                return null;
-        }
+        var strategy = _strategies.FirstOrDefault(s => s.CanHandle(type));
+        return strategy?.CreateContentContainer(name, content, compress, _streamManager);
     }
 
     private async Task<ValidationResult> ValidateFileAsync(DropBearFile file)
@@ -96,17 +94,5 @@ public sealed class FileCreator : IFileCreator, IDisposable
         var results = await _strategyValidator.ValidateAsync(file).ConfigureAwait(false);
         return results; // Assuming ValidateAsync returns a ValidationResult
     }
-
-    private void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-
-        if (disposing)
-        {
-            // Managed resources to dispose
-        }
-
-        _disposed = true;
-    }
+    
 }

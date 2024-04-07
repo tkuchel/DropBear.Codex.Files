@@ -1,7 +1,6 @@
 using DropBear.Codex.Core.ReturnTypes;
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Models;
-using DropBear.Codex.Validation.StrategyValidation.Interfaces;
 using Microsoft.Extensions.Logging;
 using ServiceStack.Text;
 using ZLogger;
@@ -11,20 +10,18 @@ namespace DropBear.Codex.Files.Factory.Implementations;
 
 public class FileUpdater : IFileUpdater, IDisposable
 {
-    private static RecyclableMemoryStreamManager? s_streamManager;
-    private readonly ILogger<FileCreator> _logger;
+    private readonly ILogger<FileUpdater> _logger;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly RecyclableMemoryStreamManager _streamManager;
     private bool _disposed;
     private bool _useDeltaEncoding;
     private bool _useJsonSerialization;
 
-    public FileUpdater(RecyclableMemoryStreamManager? streamManager, ILoggerFactory loggerFactory)
+    public FileUpdater(RecyclableMemoryStreamManager? streamManager, ILoggerFactory? loggerFactory)
     {
+        _streamManager = streamManager ?? throw new ArgumentNullException(nameof(streamManager));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
-        s_streamManager = streamManager ?? throw new ArgumentNullException(nameof(streamManager));
-
-        // Create a logger instance
-        _logger = _loggerFactory.CreateLogger<FileCreator>();
+        _logger = loggerFactory.CreateLogger<FileUpdater>() ?? throw new ArgumentNullException(nameof(loggerFactory));
     }
 
     public void Dispose()
@@ -48,8 +45,24 @@ public class FileUpdater : IFileUpdater, IDisposable
     public async Task<Result> UpdateFileAsync(string filePath, DropBearFile newContent,
         CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            _logger.ZLogError($"File path cannot be null or whitespace.");
+            return Result.Failure("InvalidFilePath");
+        }
+
         try
         {
+            if (!File.Exists(filePath))
+            {
+                _logger.ZLogWarning($"File does not exist: {filePath}");
+                return Result.Failure($"File does not exist: {filePath}");
+            }
+
+            // Assuming the implementation of methods to handle file read, delta encoding application, and file write
+            // as those are not provided in the provided class.
+            _logger.ZLogInformation($"Starting file update for: {filePath}");
+
             var directoryPath = Path.GetDirectoryName(filePath);
             if (directoryPath is null) throw new InvalidOperationException("Invalid file path.");
 
@@ -123,18 +136,19 @@ public class FileUpdater : IFileUpdater, IDisposable
                     return Result.Failure(writeResult.ErrorMessage);
             }
 
+            // Placeholder for actual update logic based on delta encoding or full file replacement.
             _logger.ZLogInformation($"File updated successfully: {filePath}");
 
             return Result.Success();
         }
         catch (Exception ex)
         {
-            _logger.ZLogError($"Error updating file: {filePath}. Exception: {ex.Message}");
-            return Result.Failure(ex.Message);
+            _logger.ZLogError(ex, $"Error updating file: {filePath}");
+            return Result.Failure($"Error updating file: {ex.Message}");
         }
     }
 
-    public FileUpdater WithDeltaEncoding()
+    public IFileUpdater WithDeltaEncoding()
     {
         _useDeltaEncoding = true;
         return this;
@@ -145,7 +159,9 @@ public class FileUpdater : IFileUpdater, IDisposable
         try
         {
             // Get an instance of FileManagerFactory FileWriter
-            var fileWriter = _useJsonSerialization ? FileManagerFactory.FileWriter().WithJsonSerialization() : FileManagerFactory.FileWriter().WithMessagePackSerialization();
+            var fileWriter = _useJsonSerialization
+                ? FileManagerFactory.FileWriter().WithJsonSerialization()
+                : FileManagerFactory.FileWriter().WithMessagePackSerialization();
 
             // Write the new file to the filepath.
             var writeResult = await fileWriter.WriteFileAsync(file, filePath).ConfigureAwait(false);
@@ -169,7 +185,9 @@ public class FileUpdater : IFileUpdater, IDisposable
         try
         {
             // Get an instance of FileManagerFactory FileWriter
-            var fileWriter = _useJsonSerialization ? FileManagerFactory.FileWriter().WithJsonSerialization() : FileManagerFactory.FileWriter().WithMessagePackSerialization();
+            var fileWriter = _useJsonSerialization
+                ? FileManagerFactory.FileWriter().WithJsonSerialization()
+                : FileManagerFactory.FileWriter().WithMessagePackSerialization();
 
             // Write the new file to the filepath.
             var writeResult =
@@ -189,15 +207,16 @@ public class FileUpdater : IFileUpdater, IDisposable
         }
     }
 
-    private void Dispose(bool disposing)
+    protected virtual void Dispose(bool disposing)
     {
         if (_disposed)
             return;
 
         if (disposing)
-            // Dispose managed state (managed objects).
-            if (_loggerFactory is IDisposable disposable)
-                disposable.Dispose();
+        {
+            // Managed resource cleanup, if needed. Example:
+            // _streamManager?.Dispose();
+        }
 
         _disposed = true;
     }

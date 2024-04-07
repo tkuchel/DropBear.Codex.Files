@@ -16,8 +16,9 @@ public class ContentTypeInfo
         TypeName = string.Empty;
         NameSpace = string.Empty;
     }
-    
-    public ContentTypeInfo(Type type) : this(type.Assembly.GetName().Name, type.Name, type.Namespace)
+
+    public ContentTypeInfo(Type type) : this(type.Assembly.GetName().Name ?? string.Empty, type.Name,
+        type.Namespace ?? string.Empty)
     {
     }
 
@@ -47,9 +48,10 @@ public class ContentTypeInfo
         var fullTypeName = GetFullTypeName();
         if (TypeCache.TryGetValue(fullTypeName, out var type)) return type;
 
-        type = Type.GetType(fullTypeName) ?? Assembly.Load(AssemblyName)?.GetType(fullTypeName);
+        type = Type.GetType(fullTypeName) ?? Assembly.Load(AssemblyName).GetType(fullTypeName);
 
-        TypeCache[fullTypeName] = type ?? throw new ContentTypeNotFoundException($"Content type {fullTypeName} not found.");
+        TypeCache[fullTypeName] =
+            type ?? throw new ContentTypeNotFoundException($"Content type {fullTypeName} not found.");
         return type;
     }
 

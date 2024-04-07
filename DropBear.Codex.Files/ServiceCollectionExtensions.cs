@@ -2,7 +2,6 @@
 using DropBear.Codex.Files.Factory;
 using DropBear.Codex.Files.Factory.Implementations;
 using DropBear.Codex.Files.Interfaces;
-using DropBear.Codex.Files.Services;
 using DropBear.Codex.Utilities.Extensions;
 using DropBear.Codex.Validation;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,15 +23,12 @@ public static class ServiceCollectionExtensions
     /// </remarks>
     public static void AddDropBearCodexFiles(this IServiceCollection services)
     {
-        // Add logging services
-        services.AddAppLogger();
-
         // Add validation services
         services.AddValidationServices();
 
         // Add MessageTemplateManager service
         services.AddMessageTemplateManager();
-        
+
         // Add RecyclableMemoryStreamManager service
         services.AddSingleton<RecyclableMemoryStreamManager>(); // If not already registered
         services.AddTransient<IContentContainerFactory, ContentContainerFactory>();
@@ -40,8 +36,6 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IFileReader, FileReader>();
         services.AddTransient<IFileDeleter, FileDeleter>();
         services.AddTransient<IFileUpdater, FileUpdater>();
-        services.AddTransient<IFileValidator, FileValidator>();
-        services.AddTransient<IFileIntegrityChecker, FileIntegrityChecker>();
-
+        services.AddTransient<IFileDeltaUtility, FileDeltaUpdater>();
     }
 }

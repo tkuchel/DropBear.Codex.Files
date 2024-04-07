@@ -25,7 +25,7 @@ public class FileWriter : IFileWriter, IDisposable
     private readonly ILoggerFactory _loggerFactory;
     private bool _disposed;
 
-    public FileWriter(RecyclableMemoryStreamManager? streamManager, ILoggerFactory loggerFactory)
+    public FileWriter(RecyclableMemoryStreamManager? streamManager, ILoggerFactory? loggerFactory)
     {
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
         s_streamManager = streamManager ?? throw new ArgumentNullException(nameof(streamManager));

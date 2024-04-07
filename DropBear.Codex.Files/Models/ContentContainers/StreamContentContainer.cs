@@ -18,15 +18,16 @@ public class StreamContentContainer : IContentContainer
         _streamManager = streamManager ?? throw new ArgumentNullException(nameof(streamManager));
         Name = name ?? throw new ArgumentNullException(nameof(name));
         IsCompressed = compress;
-        Content = contentStream != null ? CompressIfNeeded(ReadStream(contentStream), compress) : Array.Empty<byte>();
-        Length = Content.Length;
+        _content = contentStream is not null ? CompressIfNeeded(ReadStream(contentStream), compress) : Array.Empty<byte>();
+        Length = _content.Length;
         ContentType = new ContentTypeInfo(typeof(byte[]));
     }
 
     public string Name { get; }
     public string Hash => _lazyHash ??= GenerateContentHash();
 
-    public byte[] Content { get; }
+    private byte[] _content { get; }
+    public byte[] Content() => _content;
     public int Length { get; }
     public ContentTypeInfo ContentType { get; }
     public bool IsCompressed { get; }
@@ -44,7 +45,7 @@ public class StreamContentContainer : IContentContainer
         try
         {
             using var stream = _streamManager.GetStream();
-            stream.Write(Content, 0, Content.Length);
+            stream.Write(_content, 0, _content.Length);
             stream.Position = 0;
             using var sha256Hasher = SHA256.Create();
             var hash = sha256Hasher.ComputeHash(stream);

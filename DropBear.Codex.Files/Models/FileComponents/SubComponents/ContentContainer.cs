@@ -37,6 +37,7 @@ public class ContentContainer : IContentContainer
     }
 
 
+    // ReSharper disable once InconsistentNaming
     [Key(2)] private byte[] _content { get; set; }
 
     [Key(0)] public string Name { get; set; }

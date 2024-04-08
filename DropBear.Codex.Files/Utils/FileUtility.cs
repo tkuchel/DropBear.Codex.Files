@@ -1,4 +1,3 @@
-using DropBear.Codex.Core.ReturnTypes;
 using DropBear.Codex.Files.Models;
 
 namespace DropBear.Codex.Files.Utils;
@@ -17,8 +16,8 @@ public static class FileUtility
 
         return ConstructFilePath(file, filePath);
     }
-    
-    public static string GetFilePath(string fileName,  string filePath,string fileExtension = "dbf")
+
+    public static string GetFilePath(string fileName, string filePath, string fileExtension = "dbf")
     {
         if (!IsValidFileName(fileName))
             return string.Empty;
@@ -26,7 +25,7 @@ public static class FileUtility
         filePath = SanitizeFilePath(filePath);
         EnsureDirectoryExists(filePath);
 
-        return ConstructFilePath(fileName, filePath,fileExtension);
+        return ConstructFilePath(fileName, filePath, fileExtension);
     }
 
     private static string SanitizeFilePath(string filePath) =>
@@ -40,7 +39,7 @@ public static class FileUtility
 
     private static string ConstructFilePath(DropBearFile file, string filePath) =>
         Path.Combine(filePath, $"{file.Metadata.FileName}.{file.Header?.Signature.Extension}");
-    
+
     private static string ConstructFilePath(string fileName, string filePath, string fileExtension) =>
         Path.Combine(filePath, $"{fileName}.{fileExtension}");
 }

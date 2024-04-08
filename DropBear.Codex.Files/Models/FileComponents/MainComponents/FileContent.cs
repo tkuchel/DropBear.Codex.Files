@@ -71,7 +71,7 @@ public class FileContent
     public byte[] GetRawContent<T>()
     {
         var container = GetContent<T>();
-        return container?.Content() ?? throw new FileContentNotFoundException();
+        return container.Content() ?? throw new FileContentNotFoundException();
     }
 
     /// <summary>
@@ -81,7 +81,7 @@ public class FileContent
     public byte[] GetRawContent()
     {
         var container = GetContent();
-        return container?.Content() ?? throw new FileContentNotFoundException();
+        return container.Content() ?? throw new FileContentNotFoundException();
     }
 
     /// <summary>

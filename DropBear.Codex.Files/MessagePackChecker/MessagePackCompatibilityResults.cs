@@ -10,6 +10,7 @@ public class MessagePackCompatibilityResults
     /// <summary>
     ///     Gets or sets the collection of types that passed the compatibility check.
     /// </summary>
+    // ReSharper disable once CollectionNeverQueried.Global
     public Collection<string> SuccessTypes { get; set; } = [];
 
     /// <summary>

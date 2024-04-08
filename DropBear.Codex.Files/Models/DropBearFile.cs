@@ -38,11 +38,11 @@ public class DropBearFile
         CompressContent = compressContent;
     }
 
-    [Key(0)] public FileHeader? Header { get; private set; }
+    [Key(0)] public FileHeader? Header { get; private init; }
 
-    [Key(1)] public FileMetadata Metadata { get; private set; }
+    [Key(1)] public FileMetadata Metadata { get; private init; }
 
-    [Key(2)] public FileContent Content { get; private set; }
+    [Key(2)] public FileContent Content { get; private init; }
 
     [Key(3)] public bool CompressContent { get; }
 

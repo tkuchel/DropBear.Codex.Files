@@ -9,7 +9,7 @@ namespace DropBear.Codex.Files.Models.FileComponents.MainComponents;
 [MessagePackObject]
 public class FileMetadata
 {
-    [Key(0)] public string FileName { get; set; } = string.Empty;
+    [Key(0)] public string FileName { get; init; } = string.Empty;
 
     [Key(1)] public int FileSize { get; private set; }
 
@@ -17,7 +17,7 @@ public class FileMetadata
 
     [Key(3)] public DateTimeOffset FileModifiedDate { get; internal set; } = DateTimeOffset.UtcNow;
 
-    [Key(4)] public string FileOwner { get; set; } = string.Empty;
+    [Key(4)] public string FileOwner { get; init; } = string.Empty;
 
     [Key(5)] public Collection<ContentTypeInfo> ContentTypes { get; } = [];
 
@@ -26,7 +26,7 @@ public class FileMetadata
         new(StringComparer.OrdinalIgnoreCase);
 
     [Key(7)]
-    public Dictionary<string, string> CustomMetadata { get; } =
+    private Dictionary<string, string> CustomMetadata { get; } =
         new(StringComparer.OrdinalIgnoreCase);
 
     public void UpdateWithNewContent(IContentContainer content)
@@ -46,7 +46,7 @@ public class FileMetadata
     /// <summary>
     ///     Updates the last modified date to the current time.
     /// </summary>
-    public void UpdateModifiedDate() => FileModifiedDate = DateTimeOffset.UtcNow;
+    private void UpdateModifiedDate() => FileModifiedDate = DateTimeOffset.UtcNow;
 
     /// <summary>
     ///     Updates the file size to the provided value.

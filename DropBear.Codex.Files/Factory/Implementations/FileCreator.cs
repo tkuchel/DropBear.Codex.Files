@@ -2,7 +2,6 @@ using DropBear.Codex.Core.ReturnTypes;
 using DropBear.Codex.Files.ContentContainerStrategies;
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Models;
-using DropBear.Codex.Files.Models.ContentContainers;
 using DropBear.Codex.Validation.ReturnTypes;
 using DropBear.Codex.Validation.StrategyValidation.Interfaces;
 using Microsoft.Extensions.Logging;
@@ -15,10 +14,9 @@ namespace DropBear.Codex.Files.Factory.Implementations;
 public sealed class FileCreator : IFileCreator
 {
     private readonly ILogger<FileCreator> _logger;
-    private readonly ILoggerFactory _loggerFactory;
+    private readonly List<IContentContainerStrategy> _strategies;
     private readonly IStrategyValidator _strategyValidator;
     private readonly RecyclableMemoryStreamManager _streamManager;
-    private readonly List<IContentContainerStrategy> _strategies;
     private bool _useCompression;
 
     public FileCreator(RecyclableMemoryStreamManager? streamManager, ILoggerFactory? loggerFactory,
@@ -26,15 +24,15 @@ public sealed class FileCreator : IFileCreator
     {
         _streamManager = streamManager ?? throw new ArgumentNullException(nameof(streamManager));
         _strategyValidator = strategyValidator ?? throw new ArgumentNullException(nameof(strategyValidator));
-        _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
-        _logger = loggerFactory.CreateLogger<FileCreator>();
-        
+        var loggerFactory1 = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
+        _logger = loggerFactory1.CreateLogger<FileCreator>();
+
         // Initialize strategies
         _strategies = new List<IContentContainerStrategy>
         {
             new StringContentContainerStrategy(),
             new ByteContentContainerStrategy(),
-            new StreamContentContainerStrategy(),
+            new StreamContentContainerStrategy()
             // Add other strategies here
         };
     }
@@ -94,5 +92,4 @@ public sealed class FileCreator : IFileCreator
         var results = await _strategyValidator.ValidateAsync(file).ConfigureAwait(false);
         return results; // Assuming ValidateAsync returns a ValidationResult
     }
-    
 }

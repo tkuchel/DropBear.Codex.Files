@@ -24,6 +24,7 @@ public class StringContentContainer : IContentContainer
         ContentType = new ContentTypeInfo(typeof(byte[]));
     }
 
+    // ReSharper disable once InconsistentNaming
     private byte[] _content { get; }
     public byte[] Content() => _content;
 

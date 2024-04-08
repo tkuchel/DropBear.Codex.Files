@@ -17,7 +17,7 @@ public static class MessagePackCompatibilityAggregator
             if (result.IsSuccess)
                 results.SuccessTypes.Add(type.Name);
             else
-                results.FailedTypes.Add(type.Name, result.ErrorMessage ?? "Unknown error occurred.");
+                results.FailedTypes.Add(type.Name, result.ErrorMessage );
         }
 
         return results;

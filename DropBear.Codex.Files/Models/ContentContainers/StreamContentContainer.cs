@@ -1,5 +1,3 @@
-using System;
-using System.IO;
 using System.Security.Cryptography;
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Models.FileComponents.SubComponents;
@@ -13,20 +11,24 @@ public class StreamContentContainer : IContentContainer
     private readonly RecyclableMemoryStreamManager _streamManager;
     private string? _lazyHash;
 
-    public StreamContentContainer(RecyclableMemoryStreamManager? streamManager, string name, Stream? contentStream, bool compress)
+    public StreamContentContainer(RecyclableMemoryStreamManager? streamManager, string name, Stream? contentStream,
+        bool compress)
     {
         _streamManager = streamManager ?? throw new ArgumentNullException(nameof(streamManager));
         Name = name ?? throw new ArgumentNullException(nameof(name));
         IsCompressed = compress;
-        _content = contentStream is not null ? CompressIfNeeded(ReadStream(contentStream), compress) : Array.Empty<byte>();
+        _content = contentStream is not null
+            ? CompressIfNeeded(ReadStream(contentStream), compress)
+            : Array.Empty<byte>();
         Length = _content.Length;
         ContentType = new ContentTypeInfo(typeof(byte[]));
     }
 
+    // ReSharper disable once InconsistentNaming
+    private byte[] _content { get; }
+
     public string Name { get; }
     public string Hash => _lazyHash ??= GenerateContentHash();
-
-    private byte[] _content { get; }
     public byte[] Content() => _content;
     public int Length { get; }
     public ContentTypeInfo ContentType { get; }

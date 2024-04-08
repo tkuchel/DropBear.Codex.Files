@@ -36,6 +36,7 @@ public class ByteContentContainer : IContentContainer
     public string Name { get; }
     public string Hash => _lazyHash ??= GenerateContentHash();
 
+    // ReSharper disable once InconsistentNaming
     private byte[] _content { get; }
     public byte[] Content() => _content;
     public int Length { get; }

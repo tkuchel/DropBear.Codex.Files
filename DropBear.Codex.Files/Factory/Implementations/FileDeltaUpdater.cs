@@ -13,14 +13,12 @@ namespace DropBear.Codex.Files.Factory.Implementations;
 public class FileDeltaUpdater : IFileDeltaUtility
 {
     private readonly ILogger<FileDeltaUpdater>? _logger;
-    private readonly ILoggerFactory? _loggerFactory;
     private readonly RecyclableMemoryStreamManager? _streamManager;
     private readonly ConsoleProgressReporter _progressReporter = new();
     
     public FileDeltaUpdater(RecyclableMemoryStreamManager? streamManager, ILoggerFactory? loggerFactory)
     {
         _streamManager = streamManager;
-        _loggerFactory = loggerFactory;
         _logger = loggerFactory?.CreateLogger<FileDeltaUpdater>();
     }
 

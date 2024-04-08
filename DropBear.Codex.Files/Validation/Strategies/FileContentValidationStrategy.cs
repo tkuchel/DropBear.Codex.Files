@@ -1,6 +1,5 @@
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Models.FileComponents.MainComponents;
-using DropBear.Codex.Files.Models.FileComponents.SubComponents;
 using DropBear.Codex.Utilities.Hashing;
 using DropBear.Codex.Validation.ReturnTypes;
 using DropBear.Codex.Validation.StrategyValidation.Interfaces;

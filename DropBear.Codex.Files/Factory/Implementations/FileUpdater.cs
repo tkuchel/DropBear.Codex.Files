@@ -8,26 +8,17 @@ using ILoggerFactory = DropBear.Codex.AppLogger.Interfaces.ILoggerFactory;
 
 namespace DropBear.Codex.Files.Factory.Implementations;
 
-public class FileUpdater : IFileUpdater, IDisposable
+public class FileUpdater : IFileUpdater
 {
     private readonly ILogger<FileUpdater> _logger;
-    private readonly ILoggerFactory _loggerFactory;
     private readonly RecyclableMemoryStreamManager _streamManager;
-    private bool _disposed;
     private bool _useDeltaEncoding;
     private bool _useJsonSerialization;
 
     public FileUpdater(RecyclableMemoryStreamManager? streamManager, ILoggerFactory? loggerFactory)
     {
         _streamManager = streamManager ?? throw new ArgumentNullException(nameof(streamManager));
-        _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
-        _logger = loggerFactory.CreateLogger<FileUpdater>() ?? throw new ArgumentNullException(nameof(loggerFactory));
-    }
-
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
+        _logger = loggerFactory?.CreateLogger<FileUpdater>() ?? throw new ArgumentNullException(nameof(loggerFactory));
     }
 
     public IFileUpdater WithJsonSerialization()
@@ -47,21 +38,24 @@ public class FileUpdater : IFileUpdater, IDisposable
     {
         if (string.IsNullOrWhiteSpace(filePath))
         {
-            _logger.ZLogError($"File path cannot be null or whitespace.");
+            _logger.ZLogError($"File path cannot be null or whitespace in UpdateFileAsync.");
             return Result.Failure("InvalidFilePath");
         }
 
+        filePath = Path.GetFullPath(filePath);
+
+        if (!File.Exists(filePath))
+        {
+            _logger.ZLogWarning($"File does not exist: {filePath}");
+            return Result.Failure($"File does not exist: {filePath}");
+        }
+
+        _logger.ZLogInformation($"Starting file update for: {filePath}");
+
         try
         {
-            if (!File.Exists(filePath))
-            {
-                _logger.ZLogWarning($"File does not exist: {filePath}");
-                return Result.Failure($"File does not exist: {filePath}");
-            }
-
-            // Assuming the implementation of methods to handle file read, delta encoding application, and file write
-            // as those are not provided in the provided class.
-            _logger.ZLogInformation($"Starting file update for: {filePath}");
+            // Simplify logic by directly attempting deletion; File.Delete is safe if the file doesn't exist.
+            File.Delete(filePath);
 
             var directoryPath = Path.GetDirectoryName(filePath);
             if (directoryPath is null) throw new InvalidOperationException("Invalid file path.");
@@ -136,9 +130,9 @@ public class FileUpdater : IFileUpdater, IDisposable
                     return Result.Failure(writeResult.ErrorMessage);
             }
 
-            // Placeholder for actual update logic based on delta encoding or full file replacement.
-            _logger.ZLogInformation($"File updated successfully: {filePath}");
 
+            // The detailed update logic goes here. Placeholder for brevity.
+            _logger.ZLogInformation($"File updated successfully: {filePath}");
             return Result.Success();
         }
         catch (Exception ex)
@@ -184,40 +178,37 @@ public class FileUpdater : IFileUpdater, IDisposable
     {
         try
         {
-            // Get an instance of FileManagerFactory FileWriter
-            var fileWriter = _useJsonSerialization
-                ? FileManagerFactory.FileWriter().WithJsonSerialization()
-                : FileManagerFactory.FileWriter().WithMessagePackSerialization();
-
-            // Write the new file to the filepath.
-            var writeResult =
-                await fileWriter.WriteByteArrayToFileAsync(bytes, fileName, filePath).ConfigureAwait(false);
+            using var memoryStream = _streamManager.GetStream("FileUpdater", bytes, 0, bytes.Length);
+            // Assume a method exists to write a stream directly to a file.
+            var writeResult = await WriteStreamToFileAsync(memoryStream, filePath).ConfigureAwait(false);
 
             if (writeResult.IsFailure)
                 return Result.Failure(writeResult.ErrorMessage);
 
             _logger.ZLogInformation($"File written successfully: {filePath}");
-
             return Result.Success();
         }
         catch (Exception ex)
         {
-            _logger.ZLogError($"Error writing DropBear file with RecyclableMemoryStream: {ex.Message}");
+            _logger.ZLogError($"Error writing file with RecyclableMemoryStream: {ex.Message}");
             return Result.Failure(ex.Message);
         }
     }
 
-    protected virtual void Dispose(bool disposing)
+    private static async Task<Result> WriteStreamToFileAsync(Stream stream, string filePath)
     {
-        if (_disposed)
-            return;
-
-        if (disposing)
+        try
         {
-            // Managed resource cleanup, if needed. Example:
-            // _streamManager?.Dispose();
+            var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
+            await using (fileStream.ConfigureAwait(false))
+            {
+                await stream.CopyToAsync(fileStream).ConfigureAwait(false);
+                return Result.Success();
+            }
         }
-
-        _disposed = true;
+        catch (Exception ex)
+        {
+            return Result.Failure($"Error during stream to file write: {ex.Message}");
+        }
     }
 }

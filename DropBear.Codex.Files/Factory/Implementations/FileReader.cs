@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Collections.ObjectModel;
 using System.Security.Cryptography;
 using DropBear.Codex.Core.ReturnTypes;
@@ -26,15 +27,15 @@ public class FileReader : IFileReader
         _logger = loggerFactory?.CreateLogger<FileReader>() ?? throw new ArgumentNullException(nameof(loggerFactory));
     }
 
-    public IFileReader WithJsonSerialization(bool fileWasSerializedToJson)
+    public IFileReader WithJsonSerialization()
     {
-        _useJsonSerialization = fileWasSerializedToJson;
+        _useJsonSerialization = true;
         return this;
     }
 
-    public IFileReader WithMessagePackSerialization(bool fileDataWasSerializedToMessagePack)
+    public IFileReader WithMessagePackSerialization()
     {
-        _useJsonSerialization = !fileDataWasSerializedToMessagePack;
+        _useJsonSerialization = false;
         return this;
     }
 
@@ -57,8 +58,10 @@ public class FileReader : IFileReader
 
         try
         {
-            using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            using var memoryStream = _streamManager.GetStream();
+            var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            await using (fileStream.ConfigureAwait(false))
+            {
+                using var memoryStream = _streamManager.GetStream();
             await fileStream.CopyToAsync(memoryStream, cancellationToken).ConfigureAwait(false);
             memoryStream.Position = 0;
 
@@ -81,6 +84,7 @@ public class FileReader : IFileReader
             _logger.ZLogInformation($"File hash verification succeeded.");
             _logger.ZLogInformation($"DropBear file read successfully with RecyclableMemoryStream.");
             return DeserializeDropBearFile(readResult.Components, cancellationToken);
+            }
         }
         catch (Exception ex)
         {
@@ -92,7 +96,7 @@ public class FileReader : IFileReader
     public FileReader WithHashAlgorithm(HashAlgorithmName hashAlgorithmName, int hashSize)
     {
         _hashAlgorithmName = hashAlgorithmName;
-        _hashSize = hashSize; // Now correctly tied to the instance
+        _hashSize = hashSize;
         return this;
     }
 
@@ -102,12 +106,18 @@ public class FileReader : IFileReader
             throw new InvalidOperationException("Stream must be readable to compute the hash.");
 
         using var hasher = IncrementalHash.CreateHash(_hashAlgorithmName);
-        const int bufferSize = 4096; // Adjust the buffer size as needed
-        var buffer = new byte[bufferSize];
-        int bytesRead;
-        while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
-            hasher.AppendData(buffer, 0, bytesRead);
-        return hasher.GetHashAndReset();
+        var buffer = ArrayPool<byte>.Shared.Rent(4096); // Rent a buffer from the pool
+        try
+        {
+            int bytesRead;
+            while ((bytesRead = await stream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
+                hasher.AppendData(buffer, 0, bytesRead);
+            return hasher.GetHashAndReset();
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer); // Return the buffer to the pool
+        }
     }
 
     private Result<DropBearFile> DeserializeDropBearFile(IList<byte[]> components,
@@ -161,16 +171,19 @@ public class FileReader : IFileReader
             var reconstructedStream = ReconstructStreamWithLPE(components);
             var computedHash = await ComputeHashAsync(reconstructedStream, cancellationToken).ConfigureAwait(false);
 
-            // Adjust the stream position for reading the stored hash.
+            // Ensure the file stream is at the correct position to read the stored hash.
             if (fileStream.CanSeek) fileStream.Seek(-_hashSize, SeekOrigin.End);
             var storedHash = new byte[_hashSize];
-            await fileStream.ReadAsync(storedHash.AsMemory(0, _hashSize), cancellationToken).ConfigureAwait(false);
-
-            return VerifyHash(computedHash, storedHash);
+        
+            // Reading the stored hash with verification of the read length.
+            var bytesRead = await fileStream.ReadAsync(storedHash.AsMemory(0, _hashSize), cancellationToken).ConfigureAwait(false);
+            if (bytesRead == _hashSize) return VerifyHash(computedHash, storedHash);
+            _logger.ZLogError($"Failed to read the full hash from the end of the file.");
+            return false; // Not all bytes of the hash were read.
         }
         catch (Exception ex)
         {
-            _logger?.ZLogError(ex, $"Failed to verify file integrity.");
+            _logger.ZLogError(ex, $"Failed to verify file integrity.");
             return false;
         }
     }
@@ -240,40 +253,22 @@ public class FileReader : IFileReader
             totalBytesRead += bytesRead;
         }
     }
-
-    private static async Task<byte[]> ReadHashFromEndAsync(Stream stream, int hashSize,
-        CancellationToken cancellationToken = default)
-    {
-        if (!stream.CanSeek) throw new InvalidOperationException("Stream must support seeking.");
-
-        if (stream.Length < hashSize) throw new InvalidOperationException("Stream is shorter than expected hash size.");
-
-        stream.Seek(-hashSize, SeekOrigin.End);
-        var hash = new byte[hashSize];
-        await ReadExactAsync(stream, hash, cancellationToken).ConfigureAwait(false);
-
-        return hash;
-    }
-
+    
     // ReSharper disable once InconsistentNaming
     private static MemoryStream ReconstructStreamWithLPE(IEnumerable<byte[]> components)
     {
-        var memoryStream = new MemoryStream();
+        var bytesEnumerable = components as byte[][] ?? components.ToArray();
+        var totalSize = bytesEnumerable.Sum(c => c.Length + sizeof(int)); // Calculate total size upfront
+        var memoryStream = new MemoryStream(totalSize); // Initialize MemoryStream with expected capacity
 
-        // Example: Assuming LPE involves prefixing each component with its length
-        foreach (var component in components)
+        foreach (var component in bytesEnumerable)
         {
-            // Example: Convert component length to bytes and write to stream (adjust based on actual LPE format)
             var lengthPrefix = BitConverter.GetBytes(component.Length);
             memoryStream.Write(lengthPrefix, 0, lengthPrefix.Length);
-
-            // Write the actual component
             memoryStream.Write(component, 0, component.Length);
         }
 
-        // Rewind the stream to allow reading from the beginning
         memoryStream.Position = 0;
-
         return memoryStream;
     }
 }

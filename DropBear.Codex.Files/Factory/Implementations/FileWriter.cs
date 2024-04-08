@@ -10,33 +10,78 @@ using ServiceStack.Text;
 using ZLogger;
 using ILoggerFactory = DropBear.Codex.AppLogger.Interfaces.ILoggerFactory;
 
+
 namespace DropBear.Codex.Files.Factory.Implementations;
 
-public class FileWriter : IFileWriter, IDisposable
+public class FileWriter : IFileWriter
 {
-    private static RecyclableMemoryStreamManager? s_streamManager;
-
     private static readonly MessagePackSerializerOptions Options =
         MessagePackSerializerOptions.Standard.WithSecurity(MessagePackSecurity.UntrustedData);
 
-    private static bool s_useJsonSerialization = true;
-
     private readonly ILogger<FileWriter> _logger;
-    private readonly ILoggerFactory _loggerFactory;
-    private bool _disposed;
+    private readonly RecyclableMemoryStreamManager _streamManager;
+    private bool _useJsonSerialization = true;
+
 
     public FileWriter(RecyclableMemoryStreamManager? streamManager, ILoggerFactory? loggerFactory)
     {
-        _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
-        s_streamManager = streamManager ?? throw new ArgumentNullException(nameof(streamManager));
-        // Create a logger instance for MyClass
-        _logger = _loggerFactory.CreateLogger<FileWriter>();
+        _streamManager = streamManager ?? throw new ArgumentNullException(nameof(streamManager));
+        _logger = loggerFactory?.CreateLogger<FileWriter>() ?? throw new ArgumentNullException(nameof(loggerFactory));
     }
 
-    public void Dispose()
+
+    public async Task<Result> WriteByteArrayToFileAsync(byte[] bytes, string fileName, string filePath)
     {
-        Dispose(true);
-        GC.SuppressFinalize(this);
+        try
+        {
+            // Validate file path
+            if (FileUtility.IsValidFileName(filePath))
+                return Result.Failure("File path cannot be null or empty");
+// Construct the full file path and name
+            var fullFilePathAndNameWithExtension = FileUtility.GetFilePath(fileName, filePath);
+
+
+// Check if the stream manager is null
+            if (_streamManager is null)
+                throw new InvalidOperationException("Stream manager cannot be null");
+
+// Create a stream to write the file
+            using var memoryStream = _streamManager.GetStream("FileWriter");
+            await memoryStream.WriteAsync(bytes).ConfigureAwait(false);
+
+// Reset the stream position 
+            memoryStream.Position = 0;
+
+// Write from the memory stream to the actual file.
+            var fileStream =
+                new FileStream(fullFilePathAndNameWithExtension, FileMode.Create, FileAccess.Write, FileShare.None);
+
+// Write from the memory stream to the actual file.
+            await using (fileStream.ConfigureAwait(false))
+            {
+                await memoryStream.CopyToAsync(fileStream).ConfigureAwait(false);
+
+                _logger.ZLogInformation($"Successfully wrote file to {fullFilePathAndNameWithExtension}");
+                return Result.Success();
+            }
+        }
+        catch (Exception e)
+        {
+            _logger.ZLogError(e, $"Failed to write file to {filePath}");
+            return Result.Failure(e.Message);
+        }
+    }
+
+    public IFileWriter WithJsonSerialization()
+    {
+        _useJsonSerialization = true;
+        return this;
+    }
+
+    public IFileWriter WithMessagePackSerialization()
+    {
+        _useJsonSerialization = false;
+        return this;
     }
 
     public async Task<Result> WriteFileAsync(DropBearFile file, string filePath)
@@ -50,13 +95,12 @@ public class FileWriter : IFileWriter, IDisposable
             // Check if the directory exists
             var fullFilePathAndName = FileUtility.GetFilePath(file, filePath);
 
- 
             // Check if the stream manager is null
-            if (s_streamManager is null)
+            if (_streamManager is null)
                 throw new InvalidOperationException("Stream manager cannot be null");
 
             // Create a stream to write the file
-            using var memoryStream = s_streamManager.GetStream("FileWriter");
+            using var memoryStream = _streamManager.GetStream("FileWriter");
             await SerializeDropBearFileComponents(file, memoryStream).ConfigureAwait(false);
 
             // After serializing the file components into the memory stream, compute and append the hash.
@@ -92,11 +136,11 @@ public class FileWriter : IFileWriter, IDisposable
         try
         {
             // Check if the stream manager is null
-            if (s_streamManager is null)
+            if (_streamManager is null)
                 throw new InvalidOperationException("Stream manager cannot be null");
 
             // Create a stream to write the file
-            using var memoryStream = s_streamManager.GetStream("FileWriter");
+            using var memoryStream = _streamManager.GetStream("FileWriter");
             await SerializeDropBearFileComponents(file, memoryStream).ConfigureAwait(false);
 
             // After serializing the file components into the memory stream, compute and append the hash.
@@ -114,61 +158,6 @@ public class FileWriter : IFileWriter, IDisposable
         {
             _logger.ZLogError(e, $"Failed to write file to byte array");
             return Result<byte[]>.Failure(e.Message);
-        }
-    }
-
-    public IFileWriter WithJsonSerialization()
-    {
-        s_useJsonSerialization = true;
-        return this;
-    }
-
-    public IFileWriter WithMessagePackSerialization()
-    {
-        s_useJsonSerialization = false;
-        return this;
-    }
-
-    public async Task<Result> WriteByteArrayToFileAsync(byte[] bytes,string fileName, string filePath)
-    {
-        try
-        {
-            // Validate file path
-            if (FileUtility.IsValidFileName(filePath))
-                return Result.Failure("File path cannot be null or empty");
- 
-            // Construct the full file path and name
-            var fullFilePathAndNameWithExtension = FileUtility.GetFilePath(fileName, filePath);
-
-            
-            // Check if the stream manager is null
-            if (s_streamManager is null)
-                throw new InvalidOperationException("Stream manager cannot be null");
-
-            // Create a stream to write the file
-            using var memoryStream = s_streamManager.GetStream("FileWriter");
-            await memoryStream.WriteAsync(bytes).ConfigureAwait(false);
-
-            // Reset the stream position 
-            memoryStream.Position = 0;
-
-            // Write from the memory stream to the actual file.
-            var fileStream =
-                new FileStream(fullFilePathAndNameWithExtension, FileMode.Create, FileAccess.Write, FileShare.None);
-
-            // Write from the memory stream to the actual file.
-            await using (fileStream.ConfigureAwait(false))
-            {
-                await memoryStream.CopyToAsync(fileStream).ConfigureAwait(false);
-
-                _logger.ZLogInformation($"Successfully wrote file to {fullFilePathAndNameWithExtension}");
-                return Result.Success();
-            }
-        }
-        catch (Exception e)
-        {
-            _logger.ZLogError(e, $"Failed to write file to {filePath}");
-            return Result.Failure(e.Message);
         }
     }
 
@@ -215,8 +204,7 @@ public class FileWriter : IFileWriter, IDisposable
         return hash; // Return the binary hash.
     }
 
-
-    private static async Task SerializeDropBearFileComponents(DropBearFile file, Stream fileStream)
+    private async Task SerializeDropBearFileComponents(DropBearFile file, Stream fileStream)
     {
         // Serialize and write each component of DropBearFile with length prefix.
         await WriteComponentWithLengthPrefixAsync(fileStream, file.Header).ConfigureAwait(false);
@@ -224,7 +212,7 @@ public class FileWriter : IFileWriter, IDisposable
         await WriteComponentWithLengthPrefixAsync(fileStream, file.Content).ConfigureAwait(false);
     }
 
-    private static async Task WriteComponentWithLengthPrefixAsync<T>(Stream fileStream, T component)
+    private async Task WriteComponentWithLengthPrefixAsync<T>(Stream fileStream, T component)
     {
         // Check if the file stream supports writing.
         if (!fileStream.CanWrite)
@@ -233,7 +221,7 @@ public class FileWriter : IFileWriter, IDisposable
         try
         {
             // Serialize the component using MessagePack with provided options.
-            var componentBytes = s_useJsonSerialization
+            var componentBytes = _useJsonSerialization
                 ? JsonSerializer.SerializeToString(component).GetBytes()
                 : MessagePackSerializer.Serialize(component, Options);
 
@@ -256,18 +244,5 @@ public class FileWriter : IFileWriter, IDisposable
         var lengthPrefix = BitConverter.GetBytes(data.Length);
         await stream.WriteAsync(lengthPrefix).ConfigureAwait(false);
         await stream.WriteAsync(data).ConfigureAwait(false);
-    }
-
-    private void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-
-        if (disposing)
-            // Dispose managed state (managed objects).
-            if (_loggerFactory is IDisposable disposable)
-                disposable.Dispose();
-
-        _disposed = true;
     }
 }

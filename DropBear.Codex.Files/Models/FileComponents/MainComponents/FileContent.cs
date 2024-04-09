@@ -36,7 +36,7 @@ public class FileContent
     /// <returns>True if the hash is valid, otherwise false.</returns>
     private static bool VerifyContentHash(IContentContainer content)
     {
-        var computedHash = Hasher.Hash(content.Content()).ToString();
+        var computedHash = Hasher.Hash(content.Content).ToString();
         return content.Hash == computedHash;
     }
 
@@ -71,7 +71,7 @@ public class FileContent
     public byte[] GetRawContent<T>()
     {
         var container = GetContent<T>();
-        return container.Content() ?? throw new FileContentNotFoundException();
+        return container.Content ?? throw new FileContentNotFoundException();
     }
 
     /// <summary>
@@ -81,7 +81,7 @@ public class FileContent
     public byte[] GetRawContent()
     {
         var container = GetContent();
-        return container.Content() ?? throw new FileContentNotFoundException();
+        return container.Content ?? throw new FileContentNotFoundException();
     }
 
     /// <summary>

@@ -1,5 +1,6 @@
 using DropBear.Codex.Core.ReturnTypes;
 using DropBear.Codex.Files.ContentContainerStrategies;
+using DropBear.Codex.Files.Exceptions;
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Models;
 using DropBear.Codex.Validation.ReturnTypes;
@@ -66,6 +67,8 @@ public sealed class FileCreator : IFileCreator
 
             var dropBearFile = new DropBearFile(name, Environment.UserName, _useCompression);
             dropBearFile.AddContent(contentContainer);
+            
+            //var serialized = JsonSerializer.SerializeToString(dropBearFile);
 
             var validationResult = await ValidateFileAsync(dropBearFile).ConfigureAwait(false);
             if (validationResult.IsValid || forceCreation) return Result<DropBearFile>.Success(dropBearFile);
@@ -83,8 +86,10 @@ public sealed class FileCreator : IFileCreator
     private IContentContainer? CreateContentContainer<T>(string name, T content, bool compress, Type type)
         where T : class
     {
-        var strategy = _strategies.FirstOrDefault(s => s.CanHandle(type));
-        return strategy?.CreateContentContainer(name, content, compress, _streamManager);
+        var strategy = _strategies.Find(s => s.CanHandle(type));
+        if (strategy is not null) return strategy.CreateContentContainer(name, content, compress, _streamManager);
+        _logger.ZLogError($"No strategy found for type {type.Name}");
+        throw new ContentContainerStrategyNotFound("No strategy found for type {type.Name}");
     }
 
     private async Task<ValidationResult> ValidateFileAsync(DropBearFile file)

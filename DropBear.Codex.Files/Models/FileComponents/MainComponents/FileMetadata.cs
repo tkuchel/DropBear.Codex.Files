@@ -33,7 +33,7 @@ public class FileMetadata
     {
         UpdateModifiedDate();
         FileSize += content.Length;
-        AddContentTypeAndHash(content.ContentType, content.Content());
+        AddContentTypeAndHash(content.ContentType, content.Content);
     }
 
     private void AddContentTypeAndHash(ContentTypeInfo contentType, byte[] content)

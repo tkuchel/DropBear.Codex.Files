@@ -6,7 +6,9 @@ public interface IContentContainer
 {
     string Name { get; }
     string Hash { get; }
-    byte[] Content();
+#pragma warning disable CA1819
+    byte[] Content { get; }
+#pragma warning restore CA1819
     int Length { get; }
     ContentTypeInfo ContentType { get; }
     bool IsCompressed { get; }

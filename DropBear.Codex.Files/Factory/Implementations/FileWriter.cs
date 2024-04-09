@@ -89,7 +89,7 @@ public class FileWriter : IFileWriter
         try
         {
             // Validate file path
-            if (FileUtility.IsValidFileName(filePath))
+            if (!FileUtility.IsValidFileName(filePath))
                 return Result.Failure("File path cannot be null or empty");
 
             // Check if the directory exists

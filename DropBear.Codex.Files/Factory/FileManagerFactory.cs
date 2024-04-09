@@ -1,4 +1,5 @@
 using DropBear.Codex.AppLogger.Builders;
+using DropBear.Codex.Files.Exceptions;
 using DropBear.Codex.Files.Factory.Implementations;
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.MessagePackChecker;
@@ -74,7 +75,6 @@ public static class FileManagerFactory
             lock (InitLock)
             {
                 if (s_isInitialized) return;
-                s_logger = loggerFactory?.CreateLogger<FileManagerInitializer>() ?? throw new InvalidOperationException("LoggerFactory is null.");
                 InitializeComponents(loggerFactory);
                 s_isInitialized = true;
             }
@@ -84,12 +84,14 @@ public static class FileManagerFactory
         {
             try
             {
-                if(s_logger is null) throw new InvalidOperationException("Logger is null.");
+                s_loggerFactory = loggerFactory ?? BuildDefaultLoggerFactory();
+                s_logger = s_loggerFactory.CreateLogger("FileManagerFactory");
+                if(s_logger is null) throw new LoggerIsNull("After logger factory creation, logger is null.");
                 s_logger.ZLogInformation($"Initializing FileManagerFactory components.");
                 s_streamManager = new RecyclableMemoryStreamManager();
                 s_strategyValidator = new StrategyValidator();
                 s_messageTemplateManager = new MessageTemplateManager();
-                s_loggerFactory = loggerFactory ?? BuildDefaultLoggerFactory();
+              
                 
                 s_logger.ZLogInformation($"FileManagerFactory components initialized successfully.");
                 s_logger.ZLogInformation($"Registering validation strategies and message templates.");
@@ -113,10 +115,10 @@ public static class FileManagerFactory
         private static ILoggerFactory BuildDefaultLoggerFactory() =>
             // Logger configuration logic here
             new LoggerConfigurationBuilder()
-                .SetLogLevel(LogLevel.Information)
+                .SetLogLevel(LogLevel.Debug)
                 .EnableConsoleOutput()
                 .UseJsonFormatter()
-                .ConfigureRollingFile("logs/", 1024)
+                .ConfigureRollingFile("C:\\Temp\\Logs", 1024)
                 .Build();
 
         private static void RegisterValidationStrategies()
@@ -172,5 +174,4 @@ public static class FileManagerFactory
     }
 
     // ReSharper disable once ClassNeverInstantiated.Local
-    private sealed record FileManagerFactoryLogger();
 }

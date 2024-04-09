@@ -8,7 +8,7 @@ namespace DropBear.Codex.Files.Models.FileComponents.SubComponents;
 public class FileSignature : FileFormat, IComparable<FileFormat>, IEquatable<FileFormat>
 {
     public FileSignature()
-        : base("dbf202441".GetBytes(), "application/dropbear-file", ".dbf")
+        : base("dbf202441".GetBytes(), "application/dropbear-file", "dbf")
     {
     }
 

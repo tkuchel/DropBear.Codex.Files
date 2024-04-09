@@ -13,7 +13,7 @@ public class ContentContainer : IContentContainer
     {
         Name = string.Empty;
         ContentType = new ContentTypeInfo();
-        _content = Array.Empty<byte>();
+        Content = Array.Empty<byte>();
     }
 
 
@@ -21,7 +21,7 @@ public class ContentContainer : IContentContainer
     {
         Name = name;
         ContentType = contentType;
-        _content = Array.Empty<byte>();
+        Content = Array.Empty<byte>();
         SetContent(content, compress);
         
         
@@ -32,21 +32,21 @@ public class ContentContainer : IContentContainer
         Name = name;
         ContentType = new ContentTypeInfo(type.Assembly.FullName ?? string.Empty, type.Name,
             type.Namespace ?? string.Empty);
-        _content = Array.Empty<byte>();
+        Content = Array.Empty<byte>();
         SetContent(content, compress);
     }
 
 
-    // ReSharper disable once InconsistentNaming
-    [Key(2)] private byte[] _content { get; set; }
 
     [Key(0)] public string Name { get; set; }
 
     [Key(1)] public string Hash { get; private set; } = string.Empty;
-    public byte[] Content() => _content;
+#pragma warning disable CA1819
+    [Key(2)] public byte[] Content { get; set; }
+#pragma warning restore CA1819
 
 
-    [Key(3)] public int Length => _content.Length;
+    [Key(3)] public int Length => Content.Length;
 
     [Key(4)] public ContentTypeInfo ContentType { get; set; }
 
@@ -54,16 +54,16 @@ public class ContentContainer : IContentContainer
 
     public bool VerifyContentHash(bool recomputeHash = false)
     {
-        var contentToVerify = IsCompressed ? DecompressContent(_content) : _content;
+        var contentToVerify = IsCompressed ? DecompressContent(Content) : Content;
         var currentHash = recomputeHash ? ComputeHash(contentToVerify) : Hash;
         return currentHash == ComputeHash(contentToVerify);
     }
 
     public void SetContent(byte[] content, bool compress)
     {
-        _content = compress ? CompressContent(content) : content;
+        Content = compress ? CompressContent(content) : content;
         IsCompressed = compress;
-        Hash = ComputeHash(_content);
+        Hash = ComputeHash(Content);
     }
 
     public void UpdateContent(byte[] content, bool compress) =>
@@ -98,7 +98,7 @@ public class ContentContainer : IContentContainer
 
     public string UpdateContentHash()
     {
-        Hash = ComputeHash(IsCompressed ? DecompressContent(_content) : _content);
+        Hash = ComputeHash(IsCompressed ? DecompressContent(Content) : Content);
         return Hash;
     }
 

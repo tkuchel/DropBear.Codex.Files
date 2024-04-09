@@ -19,14 +19,15 @@ public class StringContentContainer : IContentContainer
         Name = name ?? throw new ArgumentNullException(nameof(name));
         IsCompressed = compress;
         var contentBytes = string.IsNullOrEmpty(content) ? Array.Empty<byte>() : Encoding.UTF8.GetBytes(content);
-        _content = CompressIfNeeded(contentBytes, compress);
-        Length = _content.Length;
+        Content = CompressIfNeeded(contentBytes, compress);
+        Length = Content.Length;
         ContentType = new ContentTypeInfo(typeof(byte[]));
     }
 
-    // ReSharper disable once InconsistentNaming
-    private byte[] _content { get; }
-    public byte[] Content() => _content;
+ 
+#pragma warning disable CA1819
+    public byte[] Content { get; }
+#pragma warning restore CA1819
 
     public string Name { get; }
     public string Hash => _lazyHash ??= GenerateContentHash();
@@ -50,7 +51,7 @@ public class StringContentContainer : IContentContainer
         try
         {
             using var stream = _streamManager.GetStream();
-            stream.Write(_content, 0, _content.Length);
+            stream.Write(Content, 0, Content.Length);
             stream.Position = 0;
             using var sha256Hasher = SHA256.Create();
             var hash = sha256Hasher.ComputeHash(stream);

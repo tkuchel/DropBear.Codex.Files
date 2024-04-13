@@ -2,7 +2,7 @@ using DropBear.Codex.Core.ReturnTypes;
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Models;
 using Microsoft.Extensions.Logging;
-using ServiceStack.Text;
+using Microsoft.IO;
 using ZLogger;
 using ILoggerFactory = DropBear.Codex.AppLogger.Interfaces.ILoggerFactory;
 

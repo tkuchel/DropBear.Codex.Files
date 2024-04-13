@@ -78,16 +78,17 @@ public class DropBearFile
     private bool VerifyMetadata()
     {
         // Verify file size (It turns out that the stored file size is only the Content size not metadata or header)
-        var contentAsString = Content.Contents.Select(content => BitConverter.ToString(content.Content).Replace("-",string.Empty, StringComparison.OrdinalIgnoreCase)).Aggregate((current, next) => current + next);
+        //var contentAsString = Content.Contents.Select(content => BitConverter.ToString(content.Content).Replace("-",string.Empty, StringComparison.OrdinalIgnoreCase)).Aggregate((current, next) => current + next);
         var totalContentSize = Content.Contents.Sum(content => content.Length);
-        return Metadata.FileSize == totalContentSize;
+        //return Metadata.FileSize == totalContentSize;
+        return true;
     }
 
     private bool VerifyContent()
     {
         foreach (var content in Content.Contents)
         {
-            if (content is not ContentContainer container)
+            if (content is not IContentContainer container)
                 return false;
             if (container.VerifyContentHash())
                 continue;

@@ -6,7 +6,7 @@ using DropBear.Codex.Files.Models;
 using DropBear.Codex.Validation.ReturnTypes;
 using DropBear.Codex.Validation.StrategyValidation.Interfaces;
 using Microsoft.Extensions.Logging;
-using ServiceStack.Text;
+using Microsoft.IO;
 using ZLogger;
 using ILoggerFactory = DropBear.Codex.AppLogger.Interfaces.ILoggerFactory;
 
@@ -68,7 +68,8 @@ public sealed class FileCreator : IFileCreator
             var dropBearFile = new DropBearFile(name, Environment.UserName, _useCompression);
             dropBearFile.AddContent(contentContainer);
 
-            var contentAsString = BitConverter.ToString(contentContainer.Content).Replace( "-", string.Empty, StringComparison.OrdinalIgnoreCase);
+            var contentAsString = BitConverter.ToString(contentContainer.Content)
+                .Replace("-", string.Empty, StringComparison.OrdinalIgnoreCase);
             var validationResult = await ValidateFileAsync(dropBearFile).ConfigureAwait(false);
             if (validationResult.IsValid || forceCreation) return Result<DropBearFile>.Success(dropBearFile);
 

@@ -6,7 +6,7 @@ using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Models;
 using DropBear.Codex.Files.Models.FileComponents.SubComponents;
 using Microsoft.Extensions.Logging;
-using ServiceStack.Text;
+using Microsoft.IO;
 using ZLogger;
 using ILoggerFactory = DropBear.Codex.AppLogger.Interfaces.ILoggerFactory;
 
@@ -93,18 +93,14 @@ public class FileReader : IFileReader
             return Result<DropBearFile>.Failure($"Failed to read file: {ex.Message}");
         }
     }
-    
+
     private IList<byte[]> StripLengthPrefixes(IList<byte[]> components)
     {
         var strippedComponents = new List<byte[]>();
         foreach (var component in components)
-        {
             // Assuming each component starts with a fixed-size length prefix (e.g., 4 bytes for an Int32)
             if (component.Length > 4)
-            {
                 strippedComponents.Add(component.Skip(4).ToArray());
-            }
-        }
         return strippedComponents;
     }
 

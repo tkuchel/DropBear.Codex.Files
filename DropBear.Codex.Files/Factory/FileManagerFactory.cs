@@ -10,7 +10,7 @@ using DropBear.Codex.Files.Validation.Strategies;
 using DropBear.Codex.Utilities.MessageTemplates;
 using DropBear.Codex.Validation.ReturnTypes;
 using DropBear.Codex.Validation.StrategyValidation.Services;
-using ServiceStack.Text;
+using Microsoft.IO;
 using ZLogger;
 using ILogger = Microsoft.Extensions.Logging.ILogger;
 using ILoggerFactory = DropBear.Codex.AppLogger.Interfaces.ILoggerFactory;
@@ -25,8 +25,9 @@ public static class FileManagerFactory
     private static ILoggerFactory? s_loggerFactory;
     private static MessageTemplateManager? s_messageTemplateManager;
     private static ILogger? s_logger;
-    
-    public static RecyclableMemoryStreamManager StreamManager => s_streamManager ?? throw new InvalidOperationException("Stream manager is null.");
+
+    public static RecyclableMemoryStreamManager StreamManager =>
+        s_streamManager ?? throw new InvalidOperationException("Stream manager is null.");
 
     // Factory methods
     public static IFileCreator FileCreator()
@@ -87,21 +88,21 @@ public static class FileManagerFactory
             {
                 s_loggerFactory = loggerFactory ?? BuildDefaultLoggerFactory();
                 s_logger = s_loggerFactory.CreateLogger("FileManagerFactory");
-                if(s_logger is null) throw new LoggerIsNull("After logger factory creation, logger is null.");
+                if (s_logger is null) throw new LoggerIsNull("After logger factory creation, logger is null.");
                 s_logger.ZLogInformation($"Initializing FileManagerFactory components.");
                 s_streamManager = new RecyclableMemoryStreamManager();
                 s_strategyValidator = new StrategyValidator();
                 s_messageTemplateManager = new MessageTemplateManager();
-              
-                
+
+
                 s_logger.ZLogInformation($"FileManagerFactory components initialized successfully.");
                 s_logger.ZLogInformation($"Registering validation strategies and message templates.");
-                
+
                 RegisterValidationStrategies();
                 RegisterMessageTemplates();
 
                 s_logger.ZLogInformation($"Checking MessagePack compatibility for DropBearFile and subcomponents.");
-                
+
                 var compatibilityResult = CheckMessagePackCompatibility();
                 LogInitializationResults(compatibilityResult);
             }
@@ -124,7 +125,7 @@ public static class FileManagerFactory
 
         private static void RegisterValidationStrategies()
         {
-            if(s_logger is null) throw new InvalidOperationException("Logger is null.");
+            if (s_logger is null) throw new InvalidOperationException("Logger is null.");
             // Register validation strategies with the StrategyValidator service
             s_strategyValidator?.RegisterStrategy(new FileContentValidationStrategy());
             s_strategyValidator?.RegisterStrategy(new FileHeaderValidationStrategy());
@@ -142,7 +143,7 @@ public static class FileManagerFactory
 
         private static ValidationResult CheckMessagePackCompatibility()
         {
-            if(s_logger is null) throw new InvalidOperationException("Logger is null.");
+            if (s_logger is null) throw new InvalidOperationException("Logger is null.");
             // Check each class used in the DropBearFile and its subcomponents for compatibility with MessagePack serialization
             s_logger.ZLogInformation($"Checking MessagePack compatibility for DropBearFile and subcomponents.");
             var typesToCheck = new List<Type>
@@ -161,7 +162,7 @@ public static class FileManagerFactory
 
             var validationResult = ValidationResult.Success();
             foreach (var (type, reason) in results.FailedTypes) validationResult.AddError(type, reason);
-            
+
             return validationResult;
         }
 
@@ -170,7 +171,8 @@ public static class FileManagerFactory
             if (compatibilityResult.IsValid)
                 s_logger?.ZLogInformation($"MessagePack compatibility check passed.");
             else
-                s_logger?.ZLogError($"MessagePack compatibility check failed: {compatibilityResult.Errors.Count()} errors found.");
+                s_logger?.ZLogError(
+                    $"MessagePack compatibility check failed: {compatibilityResult.Errors.Count()} errors found.");
         }
     }
 

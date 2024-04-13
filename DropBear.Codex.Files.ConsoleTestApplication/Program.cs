@@ -1,4 +1,5 @@
-﻿using DropBear.Codex.Files.Factory;
+﻿using System.Text;
+using DropBear.Codex.Files.Factory;
 using DropBear.Codex.Utilities.Helpers;
 using Kokuban;
 using Newtonsoft.Json;
@@ -36,6 +37,10 @@ internal class Program
             Console.WriteLine(Chalk.Green +
                               $"File read: {readResult.Value.Metadata.FileName} at {fullFilePathAndName}");
 
+        var originalData = readResult.Value.Content.GetRawContent();
+        var originalFile = JsonConvert.DeserializeObject<TestFile>(Encoding.UTF8.GetString(originalData));
+
+        Console.WriteLine(Chalk.Green + $"Original file: {originalFile.Name}");
         Console.WriteLine(Chalk.Blue + "End of test application");
     }
 

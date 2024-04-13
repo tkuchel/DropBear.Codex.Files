@@ -4,7 +4,7 @@ using FastRsync.Delta;
 using FastRsync.Diagnostics;
 using FastRsync.Signature;
 using Microsoft.Extensions.Logging;
-using ServiceStack.Text;
+using Microsoft.IO;
 using ZLogger;
 using ILoggerFactory = DropBear.Codex.AppLogger.Interfaces.ILoggerFactory;
 
@@ -13,9 +13,9 @@ namespace DropBear.Codex.Files.Factory.Implementations;
 public class FileDeltaUpdater : IFileDeltaUtility
 {
     private readonly ILogger<FileDeltaUpdater>? _logger;
-    private readonly RecyclableMemoryStreamManager? _streamManager;
     private readonly ConsoleProgressReporter _progressReporter = new();
-    
+    private readonly RecyclableMemoryStreamManager? _streamManager;
+
     public FileDeltaUpdater(RecyclableMemoryStreamManager? streamManager, ILoggerFactory? loggerFactory)
     {
         _streamManager = streamManager;
@@ -56,23 +56,26 @@ public class FileDeltaUpdater : IFileDeltaUtility
         }
     }
 
-    public async Task<Result<byte[]>> CalculateDeltaBetweenBasisFileAndNewFileAsync(byte[]? signatureFileData, byte[]? newFileData)
+    public async Task<Result<byte[]>> CalculateDeltaBetweenBasisFileAndNewFileAsync(byte[]? signatureFileData,
+        byte[]? newFileData)
     {
         if (signatureFileData is null || signatureFileData.Length is 0)
             return Result<byte[]>.Failure("Signature file data cannot be empty.");
-    
+
         if (newFileData is null || newFileData.Length is 0)
             return Result<byte[]>.Failure("New file data cannot be empty.");
-    
+
         if (_streamManager is null)
-            return Result<byte[]>.Failure("Stream management service is unavailable. Please check the system configuration.");
+            return Result<byte[]>.Failure(
+                "Stream management service is unavailable. Please check the system configuration.");
 
         try
         {
             using var deltaStream = _streamManager.GetStream("deltaStream");
             using var newFileStream = _streamManager.GetStream("newFile", newFileData, 0, newFileData.Length);
-            using var signatureStream = _streamManager.GetStream("signatureFile", signatureFileData, 0, signatureFileData.Length);
-            
+            using var signatureStream =
+                _streamManager.GetStream("signatureFile", signatureFileData, 0, signatureFileData.Length);
+
             var signatureReader = new SignatureReader(signatureStream, _progressReporter);
             var deltaBuilder = new DeltaBuilder();
             var deltaWriter = new BinaryDeltaWriter(deltaStream);
@@ -105,7 +108,9 @@ public class FileDeltaUpdater : IFileDeltaUtility
             using var resultStream = _streamManager.GetStream("resultStream");
 
             var deltaApplier = new DeltaApplier { SkipHashCheck = true };
-            await deltaApplier.ApplyAsync(basisFileStream, new BinaryDeltaReader(deltaStream, _progressReporter), resultStream).ConfigureAwait(false);
+            await deltaApplier
+                .ApplyAsync(basisFileStream, new BinaryDeltaReader(deltaStream, _progressReporter), resultStream)
+                .ConfigureAwait(false);
 
             resultStream.Position = 0;
             return Result<byte[]>.Success(resultStream.ToArray());
@@ -116,5 +121,4 @@ public class FileDeltaUpdater : IFileDeltaUtility
             return Result<byte[]>.Failure("Failed to apply delta.");
         }
     }
-
 }

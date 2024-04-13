@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Models.FileComponents.SubComponents;
 using FastRsync.Compression;
-using ServiceStack.Text;
+using Microsoft.IO;
 
 namespace DropBear.Codex.Files.Models.ContentContainers;
 
@@ -23,7 +23,7 @@ public class StreamContentContainer : IContentContainer
         Length = Content.Length;
         ContentType = new ContentTypeInfo(typeof(byte[]));
     }
-    
+
 
     public string Name { get; }
     public string Hash => _lazyHash ??= GenerateContentHash();

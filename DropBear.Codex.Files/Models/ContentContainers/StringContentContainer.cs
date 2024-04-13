@@ -3,7 +3,7 @@ using System.Text;
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Models.FileComponents.SubComponents;
 using FastRsync.Compression;
-using ServiceStack.Text;
+using Microsoft.IO;
 
 namespace DropBear.Codex.Files.Models.ContentContainers;
 
@@ -24,7 +24,7 @@ public class StringContentContainer : IContentContainer
         ContentType = new ContentTypeInfo(typeof(byte[]));
     }
 
- 
+
 #pragma warning disable CA1819
     public byte[] Content { get; }
 #pragma warning restore CA1819
@@ -32,7 +32,6 @@ public class StringContentContainer : IContentContainer
     public string Name { get; }
     public string Hash => _lazyHash ??= GenerateContentHash();
 
-    
 
     public int Length { get; }
     public ContentTypeInfo ContentType { get; }

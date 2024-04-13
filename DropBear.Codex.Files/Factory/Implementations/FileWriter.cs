@@ -6,8 +6,8 @@ using DropBear.Codex.Files.Utils;
 using DropBear.Codex.Utilities.Helpers;
 using MessagePack;
 using Microsoft.Extensions.Logging;
+using Microsoft.IO;
 using Newtonsoft.Json;
-using ServiceStack.Text;
 using ZLogger;
 using ILoggerFactory = DropBear.Codex.AppLogger.Interfaces.ILoggerFactory;
 

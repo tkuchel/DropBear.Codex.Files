@@ -1,6 +1,7 @@
 using System.Reflection;
 using DropBear.Codex.Files.Exceptions;
 using MessagePack;
+using Newtonsoft.Json;
 
 namespace DropBear.Codex.Files.Models.FileComponents.SubComponents;
 
@@ -35,11 +36,17 @@ public class ContentTypeInfo
             : nameSpace;
     }
 
-    [Key(0)] public string AssemblyName { get; }
+    [Key(0)]
+    [JsonProperty("assemblyName")]
+    public string AssemblyName { get; private set; }
 
-    [Key(1)] public string TypeName { get; }
+    [Key(1)]
+    [JsonProperty("typeName")]
+    public string TypeName { get; private set; }
 
-    [Key(2)] public string NameSpace { get; }
+    [Key(2)]
+    [JsonProperty("nameSpace")]
+    public string NameSpace { get; private set; }
 
     private string GetFullTypeName() => $"{NameSpace}.{TypeName}";
 

@@ -62,28 +62,29 @@ public class FileReader : IFileReader
             await using (fileStream.ConfigureAwait(false))
             {
                 using var memoryStream = _streamManager.GetStream();
-            await fileStream.CopyToAsync(memoryStream, cancellationToken).ConfigureAwait(false);
-            memoryStream.Position = 0;
+                await fileStream.CopyToAsync(memoryStream, cancellationToken).ConfigureAwait(false);
+                memoryStream.Position = 0;
 
-            var readResult = await ReadComponentsAsync(memoryStream, cancellationToken).ConfigureAwait(false);
-            if (!readResult.IsSuccess)
-            {
-                _logger.ZLogError($"{readResult.ErrorMessage}");
-                return Result<DropBearFile>.Failure(readResult.ErrorMessage);
-            }
+                var readResult = await ReadComponentsAsync(memoryStream, cancellationToken).ConfigureAwait(false);
+                if (!readResult.IsSuccess)
+                {
+                    _logger.ZLogError($"{readResult.ErrorMessage}");
+                    return Result<DropBearFile>.Failure(readResult.ErrorMessage);
+                }
 
-            var verificationResult =
-                await VerifyFileIntegrityAsync(memoryStream, readResult.Components, cancellationToken)
-                    .ConfigureAwait(false);
-            if (!verificationResult)
-            {
-                _logger.ZLogError($"File hash verification failed.");
-                return Result<DropBearFile>.Failure("File hash verification failed.");
-            }
+                var verificationResult =
+                    await VerifyFileIntegrityAsync(memoryStream, readResult.Components, cancellationToken)
+                        .ConfigureAwait(false);
+                if (!verificationResult)
+                {
+                    _logger.ZLogError($"File hash verification failed.");
+                    return Result<DropBearFile>.Failure("File hash verification failed.");
+                }
 
-            _logger.ZLogInformation($"File hash verification succeeded.");
-            _logger.ZLogInformation($"DropBear file read successfully with RecyclableMemoryStream.");
-            return DeserializeDropBearFile(readResult.Components, cancellationToken);
+                _logger.ZLogInformation($"File hash verification succeeded.");
+                _logger.ZLogInformation($"DropBear file read successfully with RecyclableMemoryStream.");
+                //var strippedComponents = StripLengthPrefixes(readResult.Components);
+                return DeserializeDropBearFile(readResult.Components, cancellationToken);
             }
         }
         catch (Exception ex)
@@ -91,6 +92,20 @@ public class FileReader : IFileReader
             _logger.ZLogError(ex, $"Failed to read file: {filePath}");
             return Result<DropBearFile>.Failure($"Failed to read file: {ex.Message}");
         }
+    }
+    
+    private IList<byte[]> StripLengthPrefixes(IList<byte[]> components)
+    {
+        var strippedComponents = new List<byte[]>();
+        foreach (var component in components)
+        {
+            // Assuming each component starts with a fixed-size length prefix (e.g., 4 bytes for an Int32)
+            if (component.Length > 4)
+            {
+                strippedComponents.Add(component.Skip(4).ToArray());
+            }
+        }
+        return strippedComponents;
     }
 
     public FileReader WithHashAlgorithm(HashAlgorithmName hashAlgorithmName, int hashSize)
@@ -139,7 +154,6 @@ public class FileReader : IFileReader
         }
     }
 
-
     private static bool VerifyHash(byte[] computedHash, byte[] expectedHash) =>
         computedHash.AsSpan().SequenceEqual(expectedHash.AsSpan());
 
@@ -174,9 +188,10 @@ public class FileReader : IFileReader
             // Ensure the file stream is at the correct position to read the stored hash.
             if (fileStream.CanSeek) fileStream.Seek(-_hashSize, SeekOrigin.End);
             var storedHash = new byte[_hashSize];
-        
+
             // Reading the stored hash with verification of the read length.
-            var bytesRead = await fileStream.ReadAsync(storedHash.AsMemory(0, _hashSize), cancellationToken).ConfigureAwait(false);
+            var bytesRead = await fileStream.ReadAsync(storedHash.AsMemory(0, _hashSize), cancellationToken)
+                .ConfigureAwait(false);
             if (bytesRead == _hashSize) return VerifyHash(computedHash, storedHash);
             _logger.ZLogError($"Failed to read the full hash from the end of the file.");
             return false; // Not all bytes of the hash were read.
@@ -253,7 +268,7 @@ public class FileReader : IFileReader
             totalBytesRead += bytesRead;
         }
     }
-    
+
     // ReSharper disable once InconsistentNaming
     private static MemoryStream ReconstructStreamWithLPE(IEnumerable<byte[]> components)
     {

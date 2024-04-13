@@ -67,9 +67,8 @@ public sealed class FileCreator : IFileCreator
 
             var dropBearFile = new DropBearFile(name, Environment.UserName, _useCompression);
             dropBearFile.AddContent(contentContainer);
-            
-            //var serialized = JsonSerializer.SerializeToString(dropBearFile);
 
+            var contentAsString = BitConverter.ToString(contentContainer.Content).Replace( "-", string.Empty, StringComparison.OrdinalIgnoreCase);
             var validationResult = await ValidateFileAsync(dropBearFile).ConfigureAwait(false);
             if (validationResult.IsValid || forceCreation) return Result<DropBearFile>.Success(dropBearFile);
 

@@ -9,15 +9,15 @@ namespace DropBear.Codex.Files.Models.FileComponents.MainComponents;
 [MessagePackObject]
 public class FileMetadata
 {
-    [Key(0)] public string FileName { get; init; } = string.Empty;
+    [Key(0)] public string FileName { get; set; } = string.Empty;
 
-    [Key(1)] public int FileSize { get; private set; }
+    [Key(1)] public int FileSize { get; internal set; }
 
     [Key(2)] public DateTimeOffset FileCreatedDate { get; internal set; } = DateTimeOffset.UtcNow;
 
     [Key(3)] public DateTimeOffset FileModifiedDate { get; internal set; } = DateTimeOffset.UtcNow;
 
-    [Key(4)] public string FileOwner { get; init; } = string.Empty;
+    [Key(4)] public string FileOwner { get; set; } = string.Empty;
 
     [Key(5)] public Collection<ContentTypeInfo> ContentTypes { get; } = [];
 

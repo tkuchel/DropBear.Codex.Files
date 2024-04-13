@@ -25,6 +25,8 @@ public static class FileManagerFactory
     private static ILoggerFactory? s_loggerFactory;
     private static MessageTemplateManager? s_messageTemplateManager;
     private static ILogger? s_logger;
+    
+    public static RecyclableMemoryStreamManager StreamManager => s_streamManager ?? throw new InvalidOperationException("Stream manager is null.");
 
     // Factory methods
     public static IFileCreator FileCreator()
@@ -63,8 +65,7 @@ public static class FileManagerFactory
         return new FileDeltaUpdater(s_streamManager, s_loggerFactory);
     }
 
-    // ReSharper disable once ClassNeverInstantiated.Local
-    private sealed record FileManagerInitializer
+    private static class FileManagerInitializer
     {
         private static bool s_isInitialized;
         private static readonly object InitLock = new();

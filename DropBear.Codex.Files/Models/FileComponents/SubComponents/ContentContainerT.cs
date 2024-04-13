@@ -1,6 +1,6 @@
 using DropBear.Codex.Utilities.Helpers;
+using Newtonsoft.Json;
 using ServiceStack;
-using ServiceStack.Text;
 
 namespace DropBear.Codex.Files.Models.FileComponents.SubComponents;
 
@@ -20,7 +20,7 @@ public class ContentContainer<T> : ContentContainer
     {
         try
         {
-            return JsonSerializer.SerializeToString(contentObject).GetBytes();
+            return JsonConvert.SerializeObject(contentObject).GetBytes();
         }
         catch (Exception ex)
         {
@@ -33,7 +33,8 @@ public class ContentContainer<T> : ContentContainer
         try
         {
             // Assuming Content is uncompressed; if compressed, decompression should occur before deserialization
-            return JsonSerializer.DeserializeFromString<T>(Content.FromUtf8Bytes());
+            return JsonConvert.DeserializeObject<T>(Content.FromUtf8Bytes()) ??
+                   throw new InvalidOperationException("Deserialization failed.");
         }
         catch (Exception ex)
         {

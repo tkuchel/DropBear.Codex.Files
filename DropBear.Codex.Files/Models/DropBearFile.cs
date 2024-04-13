@@ -4,8 +4,10 @@ using DropBear.Codex.Files.Exceptions;
 using DropBear.Codex.Files.Interfaces;
 using DropBear.Codex.Files.Models.FileComponents.MainComponents;
 using DropBear.Codex.Files.Models.FileComponents.SubComponents;
+using DropBear.Codex.Files.Utils;
 using MessagePack;
-using ServiceStack.Text;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 
 namespace DropBear.Codex.Files.Models;
 
@@ -75,6 +77,8 @@ public class DropBearFile
 
     private bool VerifyMetadata()
     {
+        // Verify file size (It turns out that the stored file size is only the Content size not metadata or header)
+        var contentAsString = Content.Contents.Select(content => BitConverter.ToString(content.Content).Replace("-",string.Empty, StringComparison.OrdinalIgnoreCase)).Aggregate((current, next) => current + next);
         var totalContentSize = Content.Contents.Sum(content => content.Length);
         return Metadata.FileSize == totalContentSize;
     }
@@ -108,19 +112,32 @@ public class DropBearFile
     public static DropBearFile Reconstruct(bool useJsonSerialization, Collection<byte[]> components,
         CancellationToken cancellationToken = default)
     {
+        var settings = new JsonSerializerSettings
+        {
+            ContractResolver = new DefaultContractResolver
+            {
+                NamingStrategy = new CamelCaseNamingStrategy()
+            },
+            Converters = new List<JsonConverter> { new ContentContainerConverter(), new FileMetadataConverter() }
+        };
+
         if (components.Count < 3)
             throw new ArgumentException("Insufficient components for reconstruction.", nameof(components));
 
         var header = useJsonSerialization
-            ? JsonSerializer.DeserializeFromString<FileHeader>(Encoding.UTF8.GetString(components[0]))
+            ? JsonConvert.DeserializeObject<FileHeader>(Encoding.UTF8.GetString(components[0]), settings)
             : MessagePackSerializer.Deserialize<FileHeader>(components[0], cancellationToken: cancellationToken);
         var metadata = useJsonSerialization
-            ? JsonSerializer.DeserializeFromString<FileMetadata>(Encoding.UTF8.GetString(components[1]))
+            ? JsonConvert.DeserializeObject<FileMetadata>(Encoding.UTF8.GetString(components[1]), settings)
             : MessagePackSerializer.Deserialize<FileMetadata>(components[1], cancellationToken: cancellationToken);
         var content = useJsonSerialization
-            ? JsonSerializer.DeserializeFromString<FileContent>(Encoding.UTF8.GetString(components[2]))
+            ? JsonConvert.DeserializeObject<FileContent>(Encoding.UTF8.GetString(components[2]), settings)
             : MessagePackSerializer.Deserialize<FileContent>(components[2], cancellationToken: cancellationToken);
+
+        if (header is null || metadata is null || content is null)
+            throw new InvalidOperationException("One or more components are null.");
 
         return Reconstruct(header, metadata, content);
     }
+
 }

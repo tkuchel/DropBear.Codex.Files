@@ -6,6 +6,7 @@ using DropBear.Codex.Files.Utils;
 using DropBear.Codex.Utilities.Helpers;
 using MessagePack;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using ServiceStack.Text;
 using ZLogger;
 using ILoggerFactory = DropBear.Codex.AppLogger.Interfaces.ILoggerFactory;
@@ -222,7 +223,7 @@ public class FileWriter : IFileWriter
         {
             // Serialize the component using MessagePack with provided options.
             var componentBytes = _useJsonSerialization
-                ? JsonSerializer.SerializeToString(component).GetBytes()
+                ? JsonConvert.SerializeObject(component).GetBytes()
                 : MessagePackSerializer.Serialize(component, Options);
 
             // Write the serialized component bytes to the stream with a length prefix.

@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using DropBear.Codex.Files.Interfaces;
-using ServiceStack.Text;
+using Microsoft.IO;
 
 namespace DropBear.Codex.Files.Encryption;
 

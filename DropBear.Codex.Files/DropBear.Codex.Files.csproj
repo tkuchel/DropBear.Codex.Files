@@ -19,7 +19,7 @@
 
     <ItemGroup>
         <PackageReference Include="DropBear.Codex.AppLogger" Version="2024.4.9" />
-        <PackageReference Include="DropBear.Codex.Core" Version="2024.3.13"/>
+        <PackageReference Include="DropBear.Codex.Core" Version="2024.4.1" />
         <PackageReference Include="DropBear.Codex.Utilities" Version="2024.3.13"/>
         <PackageReference Include="DropBear.Codex.Validation" Version="2024.3.1"/>
         <PackageReference Include="FastRsyncNet" Version="2.4.0" />
@@ -34,6 +34,7 @@
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
+        <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.0" />
         <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     </ItemGroup>
 

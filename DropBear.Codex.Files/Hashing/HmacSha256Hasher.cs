@@ -5,18 +5,17 @@ namespace DropBear.Codex.Files.Hashing;
 
 public class HmacSha256Hasher : IHasher, IDisposable
 {
-    private readonly RSA _privateKey;
-    private readonly RSA _publicKey;
+    private readonly RSA _rsa;
 
-    public HmacSha256Hasher(RSA publicKey, RSA privateKey)
+    public HmacSha256Hasher(RSA rsa)
     {
-        _publicKey = publicKey;
-        _privateKey = privateKey;
+        _rsa = rsa;
     }
 
     public void Dispose()
     {
         // Dispose logic if needed, for RSA keys if they're not managed elsewhere
+        _rsa.Dispose();
     }
 
     public string Hash(byte[] data)
@@ -29,7 +28,7 @@ public class HmacSha256Hasher : IHasher, IDisposable
         var hashBytes = hmac.ComputeHash(data);
 
         // Encrypt the HMAC key with RSA
-        var encryptedKey = _publicKey.Encrypt(hmac.Key, RSAEncryptionPadding.OaepSHA256);
+        var encryptedKey = _rsa.Encrypt(hmac.Key, RSAEncryptionPadding.OaepSHA256);
 
         // Convert hash and encrypted key to Base64 and combine them
         var base64Hash = Convert.ToBase64String(hashBytes);
@@ -46,7 +45,7 @@ public class HmacSha256Hasher : IHasher, IDisposable
         var encryptedKey = Convert.FromBase64String(parts[1]);
 
         // Decrypt the HMAC key
-        var hmacKey = _privateKey.Decrypt(encryptedKey, RSAEncryptionPadding.OaepSHA256);
+        var hmacKey = _rsa.Decrypt(encryptedKey, RSAEncryptionPadding.OaepSHA256);
 
         using var hmac = new HMACSHA256(hmacKey);
         var computedHash = hmac.ComputeHash(data);
@@ -67,4 +66,5 @@ public class HmacSha256Hasher : IHasher, IDisposable
         if (first.Count != second.Count) return false;
         return !first.Where((t, i) => t != second[i]).Any();
     }
+    
 }

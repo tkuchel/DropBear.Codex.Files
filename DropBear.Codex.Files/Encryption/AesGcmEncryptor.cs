@@ -18,6 +18,7 @@ public class AesGcmEncryptor : IEncryptor, IDisposable
     public void Dispose()
     {
         // Add any necessary cleanup code here
+        _rsa.Dispose();
     }
 
     public byte[] Encrypt(byte[] data)

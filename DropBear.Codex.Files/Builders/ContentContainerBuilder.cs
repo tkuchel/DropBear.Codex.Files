@@ -1,22 +1,26 @@
 using System.Text;
 using DropBear.Codex.Files.Interfaces;
+using DropBear.Codex.Files.Models;
 
 namespace DropBear.Codex.Files.Builders;
 
 public class ContentContainerBuilder
 {
-    private readonly ContentContainer _container;
+    private ContentContainer _container;
     private IContentStrategy? _hashStrategy;
 
     public ContentContainerBuilder() => _container = new ContentContainer();
 
     public ContentContainerBuilder WithObject<T>(T obj, ISerializationStrategy serializationStrategy)
     {
-        _container.ContentType = typeof(T).AssemblyQualifiedName ?? "Unidentifiable Content Type";
-        var data = serializationStrategy.ProcessData(obj);
+        _container = null;
+        _container = ContentContainer.CreateFrom(obj,serializationStrategy);
+        return this;
+    }
+    
+    public ContentContainerBuilder WithData(byte[] data)
+    {
         _container.SetData(data);
-        _container.ComputeHash();
-        _container.IsSerialized = true;
         return this;
     }
 
@@ -34,7 +38,7 @@ public class ContentContainerBuilder
 
     public ContentContainerBuilder ComputeHashIfNeeded()
     {
-        if (_hashStrategy != null)
+        if (_hashStrategy is not null)
             _container.Hash = Encoding.UTF8.GetString(_hashStrategy.ProcessData(_container.Data));
         else
             _container.ComputeHash();
@@ -43,7 +47,7 @@ public class ContentContainerBuilder
 
     public ContentContainer Build()
     {
-        if (_container.Data == null || _container.Data.Length == 0)
+        if (_container.Data is null || _container.Data.Length is 0)
             throw new InvalidOperationException("Container data must be set before building.");
         return _container;
     }

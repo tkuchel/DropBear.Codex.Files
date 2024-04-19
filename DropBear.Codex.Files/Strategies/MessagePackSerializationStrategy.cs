@@ -12,5 +12,4 @@ public class MessagePackSerializationStrategy : ISerializationStrategy
     public T RevertData<T>(byte[] data) =>
         // Directly deserialize the byte array to an object
         MessagePackSerializer.Deserialize<T>(data);
-
 }

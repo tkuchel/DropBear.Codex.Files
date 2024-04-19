@@ -1,101 +1,211 @@
 using System.Security.Cryptography;
+using DropBear.Codex.Core;
 using DropBear.Codex.Files.Interfaces;
+using DropBear.Codex.Utilities.FeatureFlags;
+using DropBear.Codex.Utilities.Hashing;
+using DropBear.Codex.Utilities.Helpers;
+
+namespace DropBear.Codex.Files.Models;
 
 public class ContentContainer
 {
-    private readonly Stack<string> transformations = new();
+    #region Constructors
+
+    public ContentContainer()
+    {
+        _flagManager.AddFlag("IsDataSet");
+        _flagManager.AddFlag("IsTemporaryDataSet");
+        _flagManager.AddFlag("IsHashComputed");
+        _flagManager.AddFlag("IsCompressed");
+        _flagManager.AddFlag("IsEncrypted");
+        _flagManager.AddFlag("IsSerialized");
+        _flagManager.AddFlag("ShouldSerialize");
+        _flagManager.AddFlag("ShouldCompress");
+        _flagManager.AddFlag("ShouldEncrypt");
+    }
+
+    #endregion
+
+    #region Private Methods
+
+    private Result ComputeHash()
+    {
+        try
+        {
+            if (Data is null) return Result.Failure("The container data is null.");
+            var hashResult = _hashingService.EncodeToBase64Hash(Data.ToArray());
+            hashResult.OnSuccess(hash => Hash = hash);
+            hashResult.OnFailure((em, ex) => throw new CryptographicException(em));
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure(ex.Message);
+        }
+    }
+
+    private Result SetDataFromByteArray(byte[]? data)
+    {
+        try
+        {
+            // Check if data is null or empty
+            if (data is null || data.Length is 0) return Result.Failure("Data is null or empty.");
+
+            // Set the data
+            Data = data;
+
+            // Set the IsDataSet flag
+            _flagManager.SetFlag("IsDataSet");
+
+            // Return success
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure(ex.Message);
+        }
+    }
+
+    private Result SetDataFromString(string? data)
+    {
+        try
+        {
+            // Check if data is null or empty
+            if (string.IsNullOrEmpty(data)) return Result.Failure("Data is null or empty.");
+
+            // Set the data
+            Data = data.GetBytes();
+
+            // Set the IsDataSet flag
+            _flagManager.SetFlag("IsDataSet");
+
+            // Return success
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure(ex.Message);
+        }
+    }
+
+    private Result SetDataFromClassType<T>(T data)
+    {
+        try
+        {
+            // Check if the data is null
+            if (data is null) return Result.Failure("Data is null.");
+
+            // Temporarily store the data until a serialization strategy is applied
+            _temporaryData = data;
+
+            // Set the IsSerialized flag
+            _flagManager.SetFlag("IsTemporaryDataSet");
+
+            // Return success
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure(ex.Message);
+        }
+    }
+
+    #endregion
+
+    #region Public Methods
+
+    public Result SetData<T>(T data)
+    {
+        // Set the ContentType to the AssemblyQualifiedName of T
+        ContentType = typeof(T).AssemblyQualifiedName ?? "Unsupported/Unknown DataType";
+
+        switch (data)
+        {
+            case byte[] byteArray:
+                return SetDataFromByteArray(byteArray);
+            case string str:
+                return SetDataFromString(str);
+            default:
+                // Check if the type of data is a class
+                if (data is not null && data.GetType().IsClass)
+                    return SetDataFromClassType(data); // Handle all class types generically
+                return Result.Failure("Data type not supported.");
+        }
+    }
+
+    public Result ApplyCompression(ICompressionStrategy compressionStrategy)
+    {
+        // Check that data has been set before continuing.
+        if (Data is null) return Result.Failure("Data is null.");
+
+        try
+        {
+            var compressedData = compressionStrategy.ProcessData(Data.ToArray());
+            if (compressedData.Length is 0)
+                return Result.Failure("Compression failed.");
+            Data = compressedData;
+            _flagManager.SetFlag("IsCompressed");
+            _transformations.Push("Compression");
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure(ex.Message, ex);
+        }
+    }
+
+    public Result ApplyEncryption(IEncryptionStrategy encryptionStrategy)
+    {
+        if (Data is null) return Result.Failure("Data is null.");
+
+        try
+        {
+            var encryptedData = encryptionStrategy.ProcessData(Data.ToArray());
+            if (encryptedData.Length is 0)
+                return Result.Failure("Encryption failed.");
+            Data = encryptedData;
+            _flagManager.SetFlag("IsEncrypted");
+            _transformations.Push("Encryption");
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure(ex.Message, ex);
+        }
+    }
+
+    public Result ApplySerialization(ISerializationStrategy serializationStrategy)
+    {
+        if (_temporaryData is null) return Result.Failure("Data is null.");
+
+        try
+        {
+            var serializedData = serializationStrategy.ProcessData(_temporaryData);
+            if (serializedData.Length is 0)
+                return Result.Failure("Serialization failed.");
+            Data = serializedData;
+            _flagManager.SetFlag("IsSerialized");
+            _transformations.Push("Serialization");
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure(ex.Message, ex);
+        }
+    }
+
+    #endregion
+
+
+    #region Fields and Properties
+
+    internal readonly DynamicFlagManager _flagManager = new();
+    private readonly XxHashingService _hashingService = new();
+    private readonly Stack<string> _transformations = new();
+    private object? _temporaryData;
     public string ContentType { get; set; } = string.Empty;
-    public byte[] Data { get; private set; }
-    public string Hash { get; internal set; }
-    public bool IsCompressed { get; private set; }
-    public bool IsEncrypted { get; private set; }
-    public bool IsHashed { get; private set; }
-    public bool IsSerialized { get; set; }
+    public IReadOnlyCollection<byte>? Data { get; private set; }
+    public string? Hash { get; internal set; } = string.Empty;
 
-    public void ApplyStrategy(IContentStrategy strategy)
-    {
-        var strategyType = strategy.GetType().Name;
-        if (transformations.Contains(strategyType, StringComparer.OrdinalIgnoreCase))
-            throw new InvalidOperationException($"A {strategyType} strategy has already been applied.");
-
-        Data = strategy.ProcessData(Data);
-        transformations.Push(strategyType);
-        UpdateStrategyFlags(strategy);
-        ComputeHash();
-    }
-
-    private void UpdateStrategyFlags(IContentStrategy strategy)
-    {
-        switch (strategy)
-        {
-            case ICompressionStrategy:
-                IsCompressed = true;
-                break;
-            case IEncryptionStrategy:
-                IsEncrypted = true;
-                break;
-            case IHashingStrategy:
-                IsHashed = true;
-                break;
-        }
-    }
-
-    public void SetData(byte[] data)
-    {
-        if (data is null || data.Length is 0)
-            throw new ArgumentException("Data cannot be null or empty.", nameof(data));
-        Data = data;
-    }
-
-    public void RevertAllStrategies(ISerializationStrategy serializationStrategy)
-    {
-        while (transformations.Count > 0)
-        {
-            var strategyType = transformations.Pop();
-            if (strategyType == "SerializationStrategy") RevertSerialization(serializationStrategy);
-            // Logic to revert other strategies
-        }
-    }
-
-    public static ContentContainer CreateFrom<T>(T obj, ISerializationStrategy serializationStrategy)
-    {
-        var container = new ContentContainer
-        {
-            ContentType = typeof(T).AssemblyQualifiedName ?? "Unidentifiable Content Type"
-        };
-        // Directly serialize the object to a byte array using the provided strategy
-        var serializedData = serializationStrategy.ProcessData(obj);
-        container.SetData(serializedData);
-        container.ComputeHash();
-        container.IsSerialized = true;
-        // Log the application of the serialization strategy
-        container.transformations.Push(serializationStrategy.GetType().Name);
-        return container;
-    }
-
-
-    public void RevertSerialization(ISerializationStrategy serializationStrategy)
-    {
-        if (!string.IsNullOrEmpty(ContentType))
-            try
-            {
-                var type = Type.GetType(ContentType);
-                if (type == null)
-                    throw new InvalidOperationException("Type information is invalid or not available.");
-
-                var method = serializationStrategy.GetType().GetMethod(nameof(ISerializationStrategy.RevertData))
-                    .MakeGenericMethod(type);
-                Data = (byte[])method.Invoke(serializationStrategy, new object[] { Data });
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException("Failed to revert serialization.", ex);
-            }
-        else
-            throw new InvalidOperationException("ContentType must be set before deserialization can occur.");
-    }
-
-    public void ComputeHash() => Hash = Convert.ToBase64String(SHA256.HashData(Data));
-
-    public bool VerifyHash(string hash) => Hash == hash;
+    #endregion
 }

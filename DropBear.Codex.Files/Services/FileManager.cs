@@ -1,3 +1,6 @@
+using System.Runtime.Versioning;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using DropBear.Codex.Files.Extensions;
 using DropBear.Codex.Files.Models;
 using FluentStorage;
@@ -6,6 +9,7 @@ using Microsoft.IO;
 
 namespace DropBear.Codex.Files.Services;
 
+[SupportedOSPlatform("windows")]
 public class FileManager
 {
     private readonly RecyclableMemoryStreamManager _memoryStreamManager = new();
@@ -13,14 +17,59 @@ public class FileManager
     private string? _accountName;
     private IBlobStorage? _azureBlobStorage;
     private string? _localPath;
-
+    private bool _enableBlobStorage;
+    
     public FileManager ConfigureLocalPath(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
             throw new ArgumentException("Local path cannot be null or empty.", nameof(path));
 
+        if (!Directory.Exists(path))
+            try
+            {
+                Directory.CreateDirectory(path);
+                Console.WriteLine("Directory created successfully.");
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Failed to create directory at {path}.", ex);
+            }
+
+        if (!HasWritePermissionOnDir(path))
+        {
+            Console.WriteLine("Attempting to add write permissions to the directory.");
+            // Assuming you want to give the current user write access
+            var currentUser = WindowsIdentity.GetCurrent().Name;
+            AddDirectorySecurity(path, currentUser, FileSystemRights.WriteData, AccessControlType.Allow);
+            if (!HasWritePermissionOnDir(path))
+                throw new UnauthorizedAccessException("Failed to set necessary write permissions.");
+        }
+
         _localPath = path;
         return this;
+    }
+
+    private static bool HasWritePermissionOnDir(string path)
+    {
+        var dInfo = new DirectoryInfo(path);
+        var dSecurity = dInfo.GetAccessControl();
+        var rules = dSecurity.GetAccessRules(true, true, typeof(SecurityIdentifier));
+
+        foreach (FileSystemAccessRule rule in rules)
+            if ((rule.FileSystemRights & FileSystemRights.WriteData) != 0)
+                if (rule.AccessControlType is AccessControlType.Allow)
+                    return true;
+        return false;
+    }
+
+    private static void AddDirectorySecurity(string path, string account, FileSystemRights rights,
+        AccessControlType controlType)
+    {
+        var dInfo = new DirectoryInfo(path);
+        var dSecurity = dInfo.GetAccessControl();
+        dSecurity.AddAccessRule(new FileSystemAccessRule(account, rights,
+            InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, controlType));
+        dInfo.SetAccessControl(dSecurity);
     }
 
     public FileManager ConfigureBlobStorage(string accountName, string accountKey)
@@ -32,16 +81,19 @@ public class FileManager
 
         _accountName = accountName;
         _accountKey = accountKey;
+        _enableBlobStorage = true;
         return this;
     }
 
     public FileManager Build()
     {
-        if (string.IsNullOrEmpty(_accountName) || string.IsNullOrEmpty(_accountKey))
-            throw new InvalidOperationException(
-                "Blob storage configuration is incomplete. Both account name and key must be set.");
+        if (_enableBlobStorage)
+        {
+            if (string.IsNullOrEmpty(_accountName) || string.IsNullOrEmpty(_accountKey))
+                throw new InvalidOperationException("Account name and key must be configured for blob storage.");
 
-        _azureBlobStorage = StorageFactory.Blobs.AzureBlobStorageWithSharedKey(_accountName, _accountKey);
+            _azureBlobStorage = StorageFactory.Blobs.AzureBlobStorageWithSharedKey( _accountName, _accountKey);
+        }
         return this;
     }
 
@@ -110,7 +162,7 @@ public class FileManager
         await WriteToFileAsync(file, newFilePath).ConfigureAwait(false);
 
         // Create a new FileVersion object
-        var fileVersion = new FileVersion(versionLabel, DateTime.UtcNow, deltaFilePath, signatureFilePath);
+        var fileVersion = new FileVersion(versionLabel, DateTime.UtcNow, currentFilePath);
 
         // Generate delta
         fileVersion.CreateDelta(currentFilePath, newFilePath);
@@ -153,7 +205,7 @@ public class FileManager
         }
 
         // Create a new FileVersion object, generate delta, apply it
-        var fileVersion = new FileVersion(versionLabel, DateTime.UtcNow, deltaFilePath, signatureFilePath);
+        var fileVersion = new FileVersion(versionLabel, DateTime.UtcNow, tempLocalPath);
         fileVersion.CreateDelta(tempLocalPath, newLocalPath);
         fileVersion.ApplyDelta(tempLocalPath, tempLocalPath);
 

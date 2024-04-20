@@ -1,4 +1,5 @@
-﻿using DropBear.Codex.Files.Builders;
+﻿using System.Text;
+using DropBear.Codex.Files.Builders;
 using DropBear.Codex.Files.Models;
 using DropBear.Codex.Files.Services;
 using DropBear.Codex.Serialization.Providers;
@@ -9,34 +10,37 @@ namespace DropBear.Codex.Files.ConsoleTestApplication;
 
 internal class Program
 {
-    private static async Task Main(string[] args)
+    public static async Task Main(string[] args)
     {
-        Console.WriteLine(Chalk.Blue + "Starting test application");
-
-        // Configuration for FileManager
         var fileManager = new FileManager()
             .ConfigureLocalPath("C:\\Temp\\DropBearFiles")
-            .ConfigureBlobStorage("yourAccountName", "yourAccountKey")
             .Build();
 
-        // Create a test file using DropBearFileBuilder
+        var contentContainer = new ContentContainerBuilder()
+            .WithData(Encoding.UTF8.GetBytes("Hello, world!"))
+            .BuildAsync();
+
         var dropBearFile = new DropBearFileBuilder()
             .AddMetadata("Author", "John Doe")
             .AddContentContainer(await CreateTestContentContainer())
+            .SetInitialVersion("v1.0", DateTime.UtcNow, "path/to/delta", "path/to/signature")
             .Build();
 
-        // Save to local file system
-        var localFilePath = "test_file.dbb";
-        await fileManager.WriteToFileAsync(dropBearFile, localFilePath);
-        Console.WriteLine(Chalk.Green + "File written to local storage.");
+        var filePath = "test.dbb";
+        await fileManager.WriteToFileAsync(dropBearFile, filePath);
 
-        // Optionally, read back the file
-        var readBackDropBearFile = await fileManager.ReadFromFileAsync(localFilePath);
-        Console.WriteLine(Chalk.Yellow + "Read back file content: " +
-                          readBackDropBearFile.ContentContainers[0].Content);
-
-        Console.WriteLine(Chalk.Blue + "End of test application");
+        var readBackDropBearFile = await fileManager.ReadFromFileAsync(filePath);
+        if (readBackDropBearFile.ContentContainers.Any())
+        {
+            var containerContent = Encoding.UTF8.GetString(readBackDropBearFile.ContentContainers.First().Data.ToArray<byte>());
+            Console.WriteLine("Read back content: " + containerContent);
+        }
+        else
+        {
+            Console.WriteLine("No content containers were found in the read file.");
+        }
     }
+
 
     private static async Task<ContentContainer> CreateTestContentContainer()
     {

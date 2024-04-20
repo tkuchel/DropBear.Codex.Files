@@ -7,18 +7,20 @@ namespace DropBear.Codex.Files.Models;
 
 public class FileVersion : IFileVersion
 {
-    public FileVersion(string versionLabel, DateTime versionDate, string deltaFilePath, string signatureFilePath)
+    private readonly string baseFilePath;
+
+    public FileVersion(string versionLabel, DateTime versionDate, string baseFilePath)
     {
         VersionLabel = versionLabel ?? throw new ArgumentNullException(nameof(versionLabel));
         VersionDate = versionDate;
-        DeltaFilePath = deltaFilePath ?? throw new ArgumentNullException(nameof(deltaFilePath));
-        SignatureFilePath = signatureFilePath ?? throw new ArgumentNullException(nameof(signatureFilePath));
+        this.baseFilePath = baseFilePath ?? throw new ArgumentNullException(nameof(baseFilePath));
     }
 
-    public string VersionLabel { get; private set; }
-    public DateTime VersionDate { get; private set; }
-    public string DeltaFilePath { get; } // Path to the delta file
-    public string SignatureFilePath { get; } // Path to the signature file
+    public string VersionLabel { get; }
+    public DateTime VersionDate { get; }
+
+    public string DeltaFilePath => $"{baseFilePath}.{VersionLabel}.delta";
+    public string SignatureFilePath => $"{baseFilePath}.{VersionLabel}.sig";
 
     // Correctly create a signature and then a delta
     public void CreateDelta(string basisFilePath, string newPath)
@@ -38,7 +40,7 @@ public class FileVersion : IFileVersion
         using (var signatureFileStream =
                new FileStream(SignatureFilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
         {
-            var signatureReader = new SignatureReader(signatureFileStream,new ConsoleProgressReporter());
+            var signatureReader = new SignatureReader(signatureFileStream, new ConsoleProgressReporter());
             var deltaBuilder = new DeltaBuilder();
             deltaBuilder.BuildDelta(newFileStream, signatureReader, new BinaryDeltaWriter(deltaFileStream));
         }

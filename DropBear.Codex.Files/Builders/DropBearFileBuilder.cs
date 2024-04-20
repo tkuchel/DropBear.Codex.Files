@@ -7,6 +7,8 @@ public class DropBearFileBuilder
 {
     private readonly DropBearFile _file;
 
+    private string baseFilePath;
+
     public DropBearFileBuilder() =>
         _file = new DropBearFile();
 
@@ -27,6 +29,22 @@ public class DropBearFileBuilder
             throw new ArgumentException("Failed to add metadata.", nameof(key), ex);
         }
 
+        return this;
+    }
+
+    public DropBearFileBuilder SetBaseFilePath(string path)
+    {
+        baseFilePath = path;
+        return this;
+    }
+
+    public DropBearFileBuilder SetInitialVersion(string label, DateTime date)
+    {
+        if (string.IsNullOrEmpty(baseFilePath))
+            throw new InvalidOperationException("Base file path must be set before setting the initial version.");
+
+        var fileVersion = new FileVersion(label, date, baseFilePath);
+        _file.AddVersion(fileVersion); // Assume this method sets the version in DropBearFile
         return this;
     }
 
@@ -68,5 +86,11 @@ public class DropBearFileBuilder
     }
 
 
-    public DropBearFile Build() => _file;
+    public DropBearFile Build()
+    {
+        if (_file.Versions.Count is 0)
+            SetInitialVersion("v1.0", DateTime.UtcNow);  // Default initial version if not set
+
+        return _file;
+    }
 }

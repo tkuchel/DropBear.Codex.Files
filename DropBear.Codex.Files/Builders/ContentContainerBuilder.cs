@@ -101,6 +101,9 @@ public class ContentContainerBuilder
     public async Task<ContentContainer> BuildAsync()
     {
         ValidateContainerSetup();
+        
+        if(_container._flagManager.IsFlagSet("NoOperation"))
+            return _container;
 
         var builder = new SerializationBuilder();
         ConfigureBuilder(builder);

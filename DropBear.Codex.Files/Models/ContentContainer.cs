@@ -24,8 +24,8 @@ public class ContentContainer : IContentContainer
         _flagManager.AddFlag("ShouldSerialize");
         _flagManager.AddFlag("ShouldCompress");
         _flagManager.AddFlag("ShouldEncrypt");
+        _flagManager.AddFlag("NoOperation");
     }
-
     public string ContentType { get; set; } = string.Empty;
     public IReadOnlyCollection<byte>? Data { get; internal set; }
     public string? Hash { get; private set; } = string.Empty;
@@ -77,6 +77,7 @@ public class ContentContainer : IContentContainer
         if (data is null || data.Length is 0) return Result.Failure("Data is null or empty.");
         Data = data;
         _flagManager.SetFlag("IsDataSet");
+        _flagManager.SetFlag("NoOperation");
         return ComputeHash();
     }
 

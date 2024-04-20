@@ -7,8 +7,8 @@ public class DropBearFileBuilder
 {
     private readonly DropBearFile _file;
 
-    public DropBearFileBuilder(DropBearFile file) =>
-        _file = file ?? throw new ArgumentNullException(nameof(file), "DropBearFile cannot be null.");
+    public DropBearFileBuilder() =>
+        _file = new DropBearFile();
 
     public DropBearFileBuilder AddMetadata(string key, string value)
     {

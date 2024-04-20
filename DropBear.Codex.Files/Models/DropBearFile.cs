@@ -14,7 +14,7 @@ public class DropBearFile
     public IReadOnlyList<IFileVersion> Versions => _versions.AsReadOnly();
     public IReadOnlyList<IContentContainer> ContentContainers => _contentContainers.AsReadOnly();
 
-    public static DropBearFileBuilder CreateBuilder() => new(new DropBearFile());
+    public static DropBearFileBuilder CreateBuilder() => new();
 
     public void AddMetadata(string key, string value)
     {

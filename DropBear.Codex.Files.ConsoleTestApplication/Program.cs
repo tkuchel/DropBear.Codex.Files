@@ -1,59 +1,60 @@
-﻿using Kokuban;
+﻿using DropBear.Codex.Files.Builders;
+using DropBear.Codex.Files.Models;
+using DropBear.Codex.Files.Services;
+using DropBear.Codex.Serialization.Providers;
+using Kokuban;
 using MessagePack;
 
 namespace DropBear.Codex.Files.ConsoleTestApplication;
 
 internal class Program
 {
-    private const string publicKeyPath = @"C:\Temp\publicKey.xml";
-    private const string privateKeyPath = @"C:\Temp\privateKey.xml";
-
     private static async Task Main(string[] args)
     {
         Console.WriteLine(Chalk.Blue + "Starting test application");
 
-        // Create a test file to work with
-        var testFile = new TestFile("test.txt", DateTime.Now, "Hello, world!");
+        // Configuration for FileManager
+        var fileManager = new FileManager()
+            .ConfigureLocalPath("C:\\Temp\\DropBearFiles")
+            .ConfigureBlobStorage("yourAccountName", "yourAccountKey")
+            .Build();
 
-        // Attempt to 
+        // Create a test file using DropBearFileBuilder
+        var dropBearFile = new DropBearFileBuilder()
+            .AddMetadata("Author", "John Doe")
+            .AddContentContainer(await CreateTestContentContainer())
+            .Build();
+
+        // Save to local file system
+        var localFilePath = "test_file.dbb";
+        await fileManager.WriteToFileAsync(dropBearFile, localFilePath);
+        Console.WriteLine(Chalk.Green + "File written to local storage.");
+
+        // Optionally, read back the file
+        var readBackDropBearFile = await fileManager.ReadFromFileAsync(localFilePath);
+        Console.WriteLine(Chalk.Yellow + "Read back file content: " +
+                          readBackDropBearFile.ContentContainers[0].Content);
 
         Console.WriteLine(Chalk.Blue + "End of test application");
     }
 
-    public static void PrintByteArray(byte[] bytes)
+    private static async Task<ContentContainer> CreateTestContentContainer()
     {
-        const int bytesPerLine = 16;
-        var bytesRemaining = bytes.Length;
-        var bytesRead = 0;
+        // Create a test content using ContentContainerBuilder
+        var content = "Hello, world!";
+        var serializedContent = MessagePackSerializer.Serialize(content);
+        var builder = new ContentContainerBuilder();
 
-        while (bytesRemaining > 0)
-        {
-            Console.Write("{0:X8}: ", bytesRead);
-
-            var bytesToPrint = Math.Min(bytesPerLine, bytesRemaining);
-
-            for (var i = 0; i < bytesToPrint; i++) Console.Write("{0:X2} ", bytes[bytesRead + i]);
-
-            for (var i = bytesToPrint; i < bytesPerLine; i++) Console.Write("   ");
-
-            Console.Write(" ");
-
-            for (var i = 0; i < bytesToPrint; i++)
-            {
-                var b = bytes[bytesRead + i];
-                var c = b < 32 || b > 126 ? '.' : (char)b;
-                Console.Write(c);
-            }
-
-            Console.WriteLine();
-
-            bytesRead += bytesToPrint;
-            bytesRemaining -= bytesToPrint;
-        }
+        var container = await builder
+            .WithData(serializedContent)
+            .WithCompression(new GZipCompressionProvider()) 
+            .BuildAsync();
+        
+        return container;
     }
 }
 
-[MessagePackObject(true)]
+[MessagePackObject]
 public class TestFile
 {
     public TestFile()

@@ -4,7 +4,8 @@ public interface IFileVersion
 {
     string VersionLabel { get; }
     DateTime VersionDate { get; }
-    void Compare(IFileVersion otherVersion);
-    void Rollback();
-    void Update(IFileVersion newVersion);
+    string DeltaFilePath { get; } // Path to the delta file
+    string SignatureFilePath { get; } // Path to the signature file
+    void CreateDelta(string basisFilePath, string newPath);
+    void ApplyDelta(string basisFilePath, string targetPath);
 }

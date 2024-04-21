@@ -1,11 +1,13 @@
 using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
+using System.Text;
 using DropBear.Codex.Files.Extensions;
 using DropBear.Codex.Files.Models;
 using FluentStorage;
 using FluentStorage.Blobs;
 using Microsoft.IO;
+using Newtonsoft.Json;
 
 namespace DropBear.Codex.Files.Services;
 
@@ -16,37 +18,34 @@ public class FileManager
     private string? _accountKey;
     private string? _accountName;
     private IBlobStorage? _azureBlobStorage;
-    private string? _localPath;
     private bool _enableBlobStorage;
-    
-    public FileManager ConfigureLocalPath(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-            throw new ArgumentException("Local path cannot be null or empty.", nameof(path));
 
-        if (!Directory.Exists(path))
+    private bool ValidateFilePath(DropBearFile file)
+    {
+        var directoryPath = Path.GetDirectoryName(file.FullPath) ??
+                            throw new InvalidOperationException("Invalid file path.");
+
+        if (!Directory.Exists(directoryPath))
             try
             {
-                Directory.CreateDirectory(path);
+                Directory.CreateDirectory(directoryPath);
                 Console.WriteLine("Directory created successfully.");
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException($"Failed to create directory at {path}.", ex);
+                throw new InvalidOperationException($"Failed to create directory at {directoryPath}.", ex);
             }
 
-        if (!HasWritePermissionOnDir(path))
+        if (!HasWritePermissionOnDir(directoryPath))
         {
             Console.WriteLine("Attempting to add write permissions to the directory.");
-            // Assuming you want to give the current user write access
             var currentUser = WindowsIdentity.GetCurrent().Name;
-            AddDirectorySecurity(path, currentUser, FileSystemRights.WriteData, AccessControlType.Allow);
-            if (!HasWritePermissionOnDir(path))
+            AddDirectorySecurity(directoryPath, currentUser, FileSystemRights.WriteData, AccessControlType.Allow);
+            if (!HasWritePermissionOnDir(directoryPath))
                 throw new UnauthorizedAccessException("Failed to set necessary write permissions.");
         }
 
-        _localPath = path;
-        return this;
+        return true;
     }
 
     private static bool HasWritePermissionOnDir(string path)
@@ -87,39 +86,40 @@ public class FileManager
 
     public FileManager Build()
     {
-        if (_enableBlobStorage)
-        {
-            if (string.IsNullOrEmpty(_accountName) || string.IsNullOrEmpty(_accountKey))
-                throw new InvalidOperationException("Account name and key must be configured for blob storage.");
+        if (!_enableBlobStorage) return this;
+        if (string.IsNullOrEmpty(_accountName) || string.IsNullOrEmpty(_accountKey))
+            throw new InvalidOperationException("Account name and key must be configured for blob storage.");
 
-            _azureBlobStorage = StorageFactory.Blobs.AzureBlobStorageWithSharedKey( _accountName, _accountKey);
-        }
+        _azureBlobStorage = StorageFactory.Blobs.AzureBlobStorageWithSharedKey(_accountName, _accountKey);
         return this;
     }
 
-    public async Task WriteToFileAsync(DropBearFile file, string path)
+    public async Task WriteToFileAsync(DropBearFile file)
     {
-        if (string.IsNullOrEmpty(_localPath))
+        if (string.IsNullOrEmpty(file.FullPath))
             throw new InvalidOperationException("Local path is not configured.");
 
-        var filePath = Path.Combine(_localPath, path);
+        if (!ValidateFilePath(file))
+            throw new InvalidOperationException("Failed to validate file path.");
+
         var stream = file.ToStream();
 
-        var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write);
+        var fileStream = new FileStream(file.FullPath, FileMode.Create, FileAccess.Write);
         await using (fileStream.ConfigureAwait(false))
         {
             await stream.CopyToAsync(fileStream).ConfigureAwait(false);
         }
     }
 
-    public async Task<DropBearFile> ReadFromFileAsync(string path)
+    public async Task<DropBearFile> ReadFromFileAsync(string fullPath)
     {
-        if (string.IsNullOrEmpty(_localPath))
+        if (string.IsNullOrEmpty(fullPath))
             throw new InvalidOperationException("Local path is not configured.");
-
-        var filePath = Path.Combine(_localPath, path);
-
-        var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+    
+        if (!File.Exists(fullPath))
+            throw new FileNotFoundException("The specified file does not exist.", fullPath);
+    
+        var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read);
         await using (fileStream.ConfigureAwait(false))
         {
             return DropBearFileExtensions.FromStream(fileStream);
@@ -151,40 +151,52 @@ public class FileManager
         return DropBearFileExtensions.FromStream(stream);
     }
 
-    public async Task UpdateFileAsync(DropBearFile file, string path, string versionLabel)
+    public async Task UpdateFileAsync(DropBearFile file, string versionLabel)
     {
-        var currentFilePath = Path.Combine(_localPath ?? string.Empty, path);
+        if (!ValidateFilePath(file)) // This already checks if the file exists and path is correct
+            throw new InvalidOperationException("Failed to validate file path.");
+
+        var currentFilePath = file.FullPath;
         var newFilePath = currentFilePath + ".new";
         var deltaFilePath = currentFilePath + ".delta";
         var signatureFilePath = currentFilePath + ".sig";
 
-        // Save new version temporarily
-        await WriteToFileAsync(file, newFilePath).ConfigureAwait(false);
+        try
+        {
+            // Save new version temporarily
+            await WriteToFileAsync(file).ConfigureAwait(false);
 
-        // Create a new FileVersion object
-        var fileVersion = new FileVersion(versionLabel, DateTime.UtcNow, currentFilePath);
+            // Create a new FileVersion object and perform delta operations
+            var fileVersion = file.CreateFileVersion(versionLabel, DateTimeOffset.UtcNow);
+            fileVersion.CreateDelta();
+            fileVersion.ApplyDelta();
 
-        // Generate delta
-        fileVersion.CreateDelta(currentFilePath, newFilePath);
-
-        // Apply delta to create updated file
-        fileVersion.ApplyDelta(currentFilePath, currentFilePath);
-
-        // Cleanup: Delete temporary and delta files
-        File.Delete(newFilePath);
-        File.Delete(deltaFilePath);
-        File.Delete(signatureFilePath);
+            // Optional: Rename new file to replace old file if all operations succeed
+            File.Delete(currentFilePath);
+            File.Move(newFilePath, currentFilePath);
+        }
+        catch (Exception ex)
+        {
+            // Handle exceptions, log them, and possibly rethrow or handle cleanup
+            throw new InvalidOperationException("Failed to update the file.", ex);
+        }
+        finally
+        {
+            // Cleanup: Ensure temporary files are deleted
+            if (File.Exists(newFilePath)) File.Delete(newFilePath);
+            if (File.Exists(deltaFilePath)) File.Delete(deltaFilePath);
+            if (File.Exists(signatureFilePath)) File.Delete(signatureFilePath);
+        }
     }
 
 
-    public async Task DeleteFileAsync(string path)
+    public async Task DeleteFileAsync(DropBearFile file)
     {
-        if (string.IsNullOrEmpty(_localPath))
+        if (string.IsNullOrEmpty(file.FullPath))
             throw new InvalidOperationException("Local path is not configured.");
 
-        var filePath = Path.Combine(_localPath, path);
-        if (File.Exists(filePath))
-            File.Delete(filePath);
+        if (File.Exists(file.FullPath))
+            File.Delete(file.FullPath);
     }
 
     public async Task UpdateBlobAsync(DropBearFile file, string blobName, string versionLabel)
@@ -205,9 +217,9 @@ public class FileManager
         }
 
         // Create a new FileVersion object, generate delta, apply it
-        var fileVersion = new FileVersion(versionLabel, DateTime.UtcNow, tempLocalPath);
-        fileVersion.CreateDelta(tempLocalPath, newLocalPath);
-        fileVersion.ApplyDelta(tempLocalPath, tempLocalPath);
+        var fileVersion = file.CreateFileVersion(versionLabel, DateTimeOffset.UtcNow);
+        fileVersion.CreateDelta();
+        fileVersion.ApplyDelta();
 
         // Upload updated file back to blob
         await UploadFileToBlobAsync(tempLocalPath, blobName).ConfigureAwait(false);
@@ -218,7 +230,6 @@ public class FileManager
         File.Delete(deltaFilePath);
         File.Delete(signatureFilePath);
     }
-
 
     public async Task DeleteBlobAsync(string blobName)
     {

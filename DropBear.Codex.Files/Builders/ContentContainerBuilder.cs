@@ -110,7 +110,7 @@ public class ContentContainerBuilder
 
         var serializer = builder.Build();
 
-        if (_container.Data is null || _container.Data.Count is 0)
+        if (_container.Data is null || _container.Data.Length is 0)
             return _container;
 
         var serializeResult = await serializer.SerializeAsync(_container.Data.ToArray()).ConfigureAwait(false);
@@ -127,7 +127,7 @@ public class ContentContainerBuilder
         if (_container is null)
             throw new InvalidOperationException("No container is set.");
 
-        if (_container.Data is not null && _container.Data.Count != 0 &&
+        if (_container.Data is not null && _container.Data.Length != 0 &&
             _container._flagManager.IsFlagSet("IsDataSet")) return;
         if (!_container._flagManager.IsFlagSet("IsTemporaryDataSet"))
             throw new InvalidOperationException("No data is set in the container.");

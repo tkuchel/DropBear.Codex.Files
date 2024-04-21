@@ -1,7 +1,8 @@
-using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using DropBear.Codex.Files.Converters;
 using DropBear.Codex.Files.Models;
 using Microsoft.IO;
-using Newtonsoft.Json;
 
 namespace DropBear.Codex.Files.Extensions;
 
@@ -9,15 +10,21 @@ public static class DropBearFileExtensions
 {
     private static readonly RecyclableMemoryStreamManager StreamManager = new();
 
+    private static readonly JsonSerializerOptions Options = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        WriteIndented = true,
+        Converters = { new TypeConverter() },
+        IncludeFields = true
+    };
+
     public static Stream ToStream(this DropBearFile file)
     {
-        var stream = StreamManager.GetStream("DropBearFileToStream");
-        using (var streamWriter = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), 1024, leaveOpen: true))
-        using (var jsonWriter = new JsonTextWriter(streamWriter))
+        Stream stream = StreamManager.GetStream("DropBearFileToStream");
+        var writerOptions = new JsonWriterOptions { Indented = true };
+        using (var writer = new Utf8JsonWriter(stream, writerOptions))
         {
-            var serializer = new JsonSerializer();
-            serializer.Serialize(jsonWriter, file);
-            jsonWriter.Flush(); // Ensure all data is written to the stream
+            JsonSerializer.Serialize(writer, file, Options);
         }
 
         stream.Position = 0; // Reset the position for reading
@@ -26,10 +33,21 @@ public static class DropBearFileExtensions
 
     public static DropBearFile FromStream(Stream stream)
     {
-        using var streamReader = new StreamReader(stream);
-        using var jsonReader = new JsonTextReader(streamReader);
-        var serializer = new JsonSerializer();
-        return serializer.Deserialize<DropBearFile>(jsonReader) ??
-               throw new InvalidOperationException("Failed to deserialize DropBearFile from stream.");
+        try
+        {
+            return JsonSerializer.Deserialize<DropBearFile>(stream, Options) ??
+                   throw new InvalidOperationException("Failed to deserialize DropBearFile from stream.");
+        }
+        catch (JsonException e)
+        {
+            Console.WriteLine($"Deserialization error: {e.Message}");
+            throw;
+        }
     }
+    
+    public static string ToJsonString(this DropBearFile file)
+    {
+        return JsonSerializer.Serialize(file, Options);
+    }
+
 }

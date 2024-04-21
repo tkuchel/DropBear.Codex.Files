@@ -1,9 +1,10 @@
 ﻿using System.Text;
+using System.Text.Json;
 using DropBear.Codex.Files.Builders;
+using DropBear.Codex.Files.Converters;
 using DropBear.Codex.Files.Models;
 using DropBear.Codex.Files.Services;
 using DropBear.Codex.Serialization.Providers;
-using Kokuban;
 using MessagePack;
 
 namespace DropBear.Codex.Files.ConsoleTestApplication;
@@ -12,27 +13,36 @@ internal class Program
 {
     public static async Task Main(string[] args)
     {
-        var fileManager = new FileManager()
-            .ConfigureLocalPath("C:\\Temp\\DropBearFiles")
-            .Build();
+        var fileManager = new FileManager().Build();
 
-        var contentContainer = new ContentContainerBuilder()
-            .WithData(Encoding.UTF8.GetBytes("Hello, world!"))
-            .BuildAsync();
+        // Asynchronously create a content container
+        var contentContainer = await CreateTestContentContainer();
 
         var dropBearFile = new DropBearFileBuilder()
+            .SetFileName("test")
+            .SetBaseFilePath(@"C:\Temp")
             .AddMetadata("Author", "John Doe")
-            .AddContentContainer(await CreateTestContentContainer())
-            .SetInitialVersion("v1.0", DateTime.UtcNow, "path/to/delta", "path/to/signature")
+            .AddContentContainer(contentContainer)
+            .SetInitialVersion("v1.0", DateTimeOffset.UtcNow)
             .Build();
 
-        var filePath = "test.dbb";
-        await fileManager.WriteToFileAsync(dropBearFile, filePath);
+        await fileManager.WriteToFileAsync(dropBearFile);
+        var readBackDropBearFile = await fileManager.ReadFromFileAsync(dropBearFile.FullPath);
+        
+        DropBearFileComparer.CompareDropBearFiles(dropBearFile,readBackDropBearFile);
 
-        var readBackDropBearFile = await fileManager.ReadFromFileAsync(filePath);
+        //TestTypeSerialization();
+        
         if (readBackDropBearFile.ContentContainers.Any())
         {
-            var containerContent = Encoding.UTF8.GetString(readBackDropBearFile.ContentContainers.First().Data.ToArray<byte>());
+            var rawData = await readBackDropBearFile.ContentContainers[0].GetRawDataAsync();
+            if (!rawData.IsSuccess)
+            {
+                Console.WriteLine("Failed to read raw data from content container.");
+                return;
+            }
+
+            var containerContent = Encoding.UTF8.GetString(rawData.Value);
             Console.WriteLine("Read back content: " + containerContent);
         }
         else
@@ -41,31 +51,42 @@ internal class Program
         }
     }
 
-
     private static async Task<ContentContainer> CreateTestContentContainer()
     {
-        // Create a test content using ContentContainerBuilder
         var content = "Hello, world!";
         var serializedContent = MessagePackSerializer.Serialize(content);
-        var builder = new ContentContainerBuilder();
-
-        var container = await builder
+        return await new ContentContainerBuilder()
             .WithData(serializedContent)
-            .WithCompression(new GZipCompressionProvider()) 
+            .WithCompression(new GZipCompressionProvider())
             .BuildAsync();
-        
-        return container;
     }
+    
+    public static void TestTypeSerialization()
+    {
+        Type testType = typeof(DropBearFile);
+        JsonSerializerOptions options = new JsonSerializerOptions
+        {
+            Converters = { new TypeConverter() },
+            WriteIndented = true
+        };
+
+        string json = JsonSerializer.Serialize(testType, options);
+        Console.WriteLine("Serialized type: " + json);
+
+        Type deserializedType = JsonSerializer.Deserialize<Type>(json, options);
+        Console.WriteLine("Deserialized type: " + deserializedType);
+    }
+
 }
 
-[MessagePackObject]
+[MessagePackObject(keyAsPropertyName: true)]
 public class TestFile
 {
     public TestFile()
     {
     }
 
-    public TestFile(string name, DateTime createdAt, string content)
+    public TestFile(string name, DateTimeOffset createdAt, string content)
     {
         Name = name;
         CreatedAt = createdAt;
@@ -73,6 +94,6 @@ public class TestFile
     }
 
     public string Name { get; set; }
-    public DateTime CreatedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
     public string Content { get; set; }
 }

@@ -1,41 +1,44 @@
-using DropBear.Codex.Files.Interfaces;
 using FastRsync.Delta;
 using FastRsync.Diagnostics;
 using FastRsync.Signature;
 
 namespace DropBear.Codex.Files.Models;
 
-public class FileVersion : IFileVersion
+public class FileVersion
 {
-    private readonly string baseFilePath;
-
-    public FileVersion(string versionLabel, DateTime versionDate, string baseFilePath)
+    public FileVersion(string versionLabel, DateTimeOffset versionDate, string currentFilePath, string newFilePath,
+        string deltaFilePath, string signatureFilePath, string baseFilePath)
     {
         VersionLabel = versionLabel ?? throw new ArgumentNullException(nameof(versionLabel));
         VersionDate = versionDate;
-        this.baseFilePath = baseFilePath ?? throw new ArgumentNullException(nameof(baseFilePath));
+        CurrentFilePath = currentFilePath;
+        NewFilePath = newFilePath;
+        DeltaFilePath = deltaFilePath;
+        SignatureFilePath = signatureFilePath;
+        BaseFilePath = baseFilePath;
     }
 
-    public string VersionLabel { get; }
-    public DateTime VersionDate { get; }
+    public string BaseFilePath { get; }
+    public string CurrentFilePath { get; }
+    public string NewFilePath { get; }
+    public string DeltaFilePath { get; }
+    public string SignatureFilePath { get; }
 
-    public string DeltaFilePath => $"{baseFilePath}.{VersionLabel}.delta";
-    public string SignatureFilePath => $"{baseFilePath}.{VersionLabel}.sig";
+    public DateTimeOffset VersionDate { get; set; }
 
-    // Correctly create a signature and then a delta
-    public void CreateDelta(string basisFilePath, string newPath)
+    public string VersionLabel { get; set; }
+
+    public void CreateDelta()
     {
-        // Create the signature file first
         var signatureBuilder = new SignatureBuilder();
-        using (var basisStream = new FileStream(basisFilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+        using (var basisStream = new FileStream(CurrentFilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
         using (var signatureStream =
                new FileStream(SignatureFilePath, FileMode.Create, FileAccess.Write, FileShare.None))
         {
             signatureBuilder.Build(basisStream, new SignatureWriter(signatureStream));
         }
 
-        // Use the signature file to create a delta
-        using (var newFileStream = new FileStream(newPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+        using (var newFileStream = new FileStream(NewFilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
         using (var deltaFileStream = new FileStream(DeltaFilePath, FileMode.Create, FileAccess.Write, FileShare.None))
         using (var signatureFileStream =
                new FileStream(SignatureFilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
@@ -46,14 +49,44 @@ public class FileVersion : IFileVersion
         }
     }
 
-    public void ApplyDelta(string basisFilePath, string targetPath)
+    public void ApplyDelta()
     {
-        using var basisFileStream = new FileStream(basisFilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var basisFileStream = new FileStream(CurrentFilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
         using var deltaFileStream = new FileStream(DeltaFilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        using var targetFileStream = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None);
+        using var targetFileStream = new FileStream(NewFilePath, FileMode.Create, FileAccess.Write, FileShare.None);
         var deltaReader = new BinaryDeltaReader(deltaFileStream, new ConsoleProgressReporter());
         var deltaApplier = new DeltaApplier();
 
         deltaApplier.Apply(basisFileStream, deltaReader, targetFileStream);
     }
+    
+    public override bool Equals(object? obj)
+    {
+        if (obj is FileVersion other)
+        {
+            return VersionLabel == other.VersionLabel &&
+                   VersionDate == other.VersionDate &&
+                   BaseFilePath == other.BaseFilePath &&
+                   CurrentFilePath == other.CurrentFilePath &&
+                   NewFilePath == other.NewFilePath &&
+                   DeltaFilePath == other.DeltaFilePath &&
+                   SignatureFilePath == other.SignatureFilePath;
+        }
+        return false;
+    }
+
+    public override int GetHashCode()
+    {
+        HashCode hash = new HashCode();
+        hash.Add(VersionLabel);
+        hash.Add(VersionDate);
+        hash.Add(BaseFilePath);
+        hash.Add(CurrentFilePath);
+        hash.Add(NewFilePath);
+        hash.Add(DeltaFilePath);
+        hash.Add(SignatureFilePath);
+        return hash.ToHashCode();
+    }
+
+
 }

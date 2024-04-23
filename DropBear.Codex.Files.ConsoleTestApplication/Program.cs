@@ -1,19 +1,21 @@
-﻿using System.Text;
-using System.Text.Json;
-using DropBear.Codex.Files.Builders;
-using DropBear.Codex.Files.Converters;
+﻿using DropBear.Codex.Files.Builders;
 using DropBear.Codex.Files.Models;
 using DropBear.Codex.Files.Services;
 using DropBear.Codex.Serialization.Providers;
+using DropBear.Codex.Serialization.Serializers;
 using MessagePack;
+using MessagePackSerializer = DropBear.Codex.Serialization.Serializers.MessagePackSerializer;
+
 
 namespace DropBear.Codex.Files.ConsoleTestApplication;
 
 internal class Program
 {
+#pragma warning disable CA1416
     public static async Task Main(string[] args)
     {
-        var fileManager = new FileManager().Build();
+        var fileManager = new FileManagerBuilder()
+            .Build();
 
         // Asynchronously create a content container
         var contentContainer = await CreateTestContentContainer();
@@ -26,24 +28,26 @@ internal class Program
             .SetInitialVersion("v1.0", DateTimeOffset.UtcNow)
             .Build();
 
-        await fileManager.WriteToFileAsync(dropBearFile);
-        var readBackDropBearFile = await fileManager.ReadFromFileAsync(dropBearFile.FullPath);
-        
-        DropBearFileComparer.CompareDropBearFiles(dropBearFile,readBackDropBearFile);
+        await FileManager.WriteToFileAsync(dropBearFile);
+        var readBackDropBearFile = await FileManager.ReadFromFileAsync(dropBearFile.FullPath);
+
+        //DropBearFileComparer.CompareDropBearFiles(dropBearFile, readBackDropBearFile);
 
         //TestTypeSerialization();
-        
+
         if (readBackDropBearFile.ContentContainers.Any())
         {
-            var rawData = await readBackDropBearFile.ContentContainers[0].GetRawDataAsync();
-            if (!rawData.IsSuccess)
+            var containerData = await readBackDropBearFile.ContentContainers.First().GetDataAsync<TestFile>();
+            if (!containerData.IsSuccess)
             {
-                Console.WriteLine("Failed to read raw data from content container.");
-                return;
+                Console.WriteLine("Failed to get data from content container.");
             }
-
-            var containerContent = Encoding.UTF8.GetString(rawData.Value);
-            Console.WriteLine("Read back content: " + containerContent);
+            else
+            {
+                var result = containerData.Value;
+                Console.WriteLine("Data from content container: " + result.Name + " " + result.CreatedAt + " " +
+                                  result.Content);
+            }
         }
         else
         {
@@ -53,37 +57,30 @@ internal class Program
 
     private static async Task<ContentContainer> CreateTestContentContainer()
     {
-        var content = "Hello, world!";
-        var serializedContent = MessagePackSerializer.Serialize(content);
+        var content = new TestFile
+        {
+            Name = "NotATest",
+            CreatedAt = DateTimeOffset.UtcNow,
+            Content = "This is not a test file."
+        };
+        //var serializedContent = MessagePackSerializer.Serialize(content);
+        //var deserializedContent = MessagePackSerializer.Deserialize<TestFile>(serializedContent);
         return await new ContentContainerBuilder()
-            .WithData(serializedContent)
-            .WithCompression(new GZipCompressionProvider())
+            .WithObject(content)
+            .WithSerializer<MessagePackSerializer>()
             .BuildAsync();
     }
-    
-    public static void TestTypeSerialization()
-    {
-        Type testType = typeof(DropBearFile);
-        JsonSerializerOptions options = new JsonSerializerOptions
-        {
-            Converters = { new TypeConverter() },
-            WriteIndented = true
-        };
-
-        string json = JsonSerializer.Serialize(testType, options);
-        Console.WriteLine("Serialized type: " + json);
-
-        Type deserializedType = JsonSerializer.Deserialize<Type>(json, options);
-        Console.WriteLine("Deserialized type: " + deserializedType);
-    }
-
+#pragma warning restore CA1416
 }
 
-[MessagePackObject(keyAsPropertyName: true)]
+[MessagePackObject(true)]
 public class TestFile
 {
     public TestFile()
     {
+        Name = string.Empty;
+        CreatedAt = DateTimeOffset.MinValue;
+        Content = string.Empty;
     }
 
     public TestFile(string name, DateTimeOffset createdAt, string content)

@@ -1,22 +1,19 @@
+using System.Runtime.Versioning;
+using DropBear.Codex.Files.Enums;
 using DropBear.Codex.Files.Models;
 using DropBear.Codex.Serialization.Factories;
 using DropBear.Codex.Serialization.Interfaces;
 
 namespace DropBear.Codex.Files.Builders;
 
-/// <summary>
-///     Builds a ContentContainer with configurable serialization, compression, and encryption capabilities.
-/// </summary>
+[SupportedOSPlatform("windows")]
 public class ContentContainerBuilder
 {
     private readonly ContentContainer _container = new();
-    private ICompressionProvider? _compressionProvider;
-    private IEncryptionProvider? _encryptionProvider;
-    private ISerializer? _serializationProvider;
+    private Type? _compressionProviderType;
+    private Type? _encryptionProviderType;
+    private Type? _serializerType;
 
-    /// <summary>
-    ///     Configures the container with an object that should be handled by the builder.
-    /// </summary>
     public ContentContainerBuilder WithObject<T>(T obj)
     {
         var setResult = _container.SetData(obj);
@@ -25,139 +22,94 @@ public class ContentContainerBuilder
         return this;
     }
 
-    /// <summary>
-    ///     Configures the container with raw byte data.
-    /// </summary>
     public ContentContainerBuilder WithData(byte[] data)
     {
         var setResult = _container.SetData(data);
         if (!setResult.IsSuccess)
             throw new InvalidOperationException($"Failed to set data: {setResult.Error}");
-        _container._flagManager.ClearFlag("ShouldSerialize");
         return this;
     }
 
-    /// <summary>
-    ///     Adds a serialization provider to the builder. Provider must be specified to enable serialization.
-    /// </summary>
-    public ContentContainerBuilder WithSerializer(ISerializer serializer)
+    public ContentContainerBuilder WithSerializer<T>() where T : ISerializer
     {
-        _serializationProvider = serializer ?? throw new ArgumentNullException(nameof(serializer));
-        _container._flagManager.SetFlag("ShouldSerialize");
+        _serializerType = typeof(T);
         return this;
     }
 
-    /// <summary>
-    ///     Adds a compression provider to the builder. Provider must be specified to enable compression.
-    /// </summary>
-    public ContentContainerBuilder WithCompression(ICompressionProvider compressionProvider)
+    public ContentContainerBuilder WithCompression<T>() where T : ICompressionProvider
     {
-        _compressionProvider = compressionProvider ?? throw new ArgumentNullException(nameof(compressionProvider));
-        _container._flagManager.SetFlag("ShouldCompress");
+        _compressionProviderType = typeof(T);
         return this;
     }
 
-    /// <summary>
-    ///     Adds an encryption provider to the builder. Provider must be specified to enable encryption.
-    /// </summary>
-    public ContentContainerBuilder WithEncryption(IEncryptionProvider encryptionProvider)
+    public ContentContainerBuilder WithEncryption<T>() where T : IEncryptionProvider
     {
-        _encryptionProvider = encryptionProvider ?? throw new ArgumentNullException(nameof(encryptionProvider));
-        _container._flagManager.SetFlag("ShouldEncrypt");
+        _encryptionProviderType = typeof(T);
         return this;
     }
 
-    /// <summary>
-    ///     Clears the serialization configuration, disabling serialization.
-    /// </summary>
     public ContentContainerBuilder NoSerialization()
     {
-        _container._flagManager.ClearFlag("ShouldSerialize");
+        _serializerType = null;
         return this;
     }
 
-    /// <summary>
-    ///     Clears the compression configuration, disabling compression.
-    /// </summary>
     public ContentContainerBuilder NoCompression()
     {
-        _container._flagManager.ClearFlag("ShouldCompress");
+        _compressionProviderType = null;
         return this;
     }
 
-    /// <summary>
-    ///     Clears the encryption configuration, disabling encryption.
-    /// </summary>
     public ContentContainerBuilder NoEncryption()
     {
-        _container._flagManager.ClearFlag("ShouldEncrypt");
+        _encryptionProviderType = null;
         return this;
     }
 
-    /// <summary>
-    ///     Asynchronously builds the ContentContainer applying serialization, compression, and encryption based on the
-    ///     configuration.
-    /// </summary>
     public async Task<ContentContainer> BuildAsync()
     {
-        ValidateContainerSetup();
-        
-        if(_container._flagManager.IsFlagSet("NoOperation"))
+        // Handle no serializer or no serialization required
+        if (_serializerType is null && !_container.RequiresSerialization())
+        {
+            _container.ComputeAndSetHash();
+            _container.EnableFlag(ContentContainerFlags.NoSerialization);
             return _container;
+        }
 
-        var builder = new SerializationBuilder();
-        ConfigureBuilder(builder);
+        // Handle compression
+        if (_compressionProviderType is not null)
+            _container.AddProvider("CompressionProvider", _compressionProviderType);
 
-        var serializer = builder.Build();
+        // Handle encryption
+        if (_encryptionProviderType is not null)
+            _container.AddProvider("EncryptionProvider", _encryptionProviderType);
 
-        if (_container.Data is null || _container.Data.Length is 0)
-            return _container;
+        // Register the serializer type in the providers collection
+        if (_serializerType is not null)
+            _container.AddProvider("Serializer", _serializerType);
 
-        var serializeResult = await serializer.SerializeAsync(_container.Data.ToArray()).ConfigureAwait(false);
-        if (serializeResult is null || serializeResult.Length is 0)
-            throw new InvalidOperationException("Failed to serialize the data.");
+        // Configure and build the serializer
+        var serializerBuilder = new SerializationBuilder();
+        _container.ConfigureContainerSerializer(serializerBuilder);
+        var serializer = _container.RequiresSerialization() ? serializerBuilder.Build() : null;
 
-        _container.Data = serializeResult;
+        // Get the data that needs to be serialized
+        var data = _container.TemporaryData;
+        if (data is null)
+            throw new InvalidOperationException("No data is available for serialization.");
+
+        // Serialize the data
+        if (serializer is null) return _container;
+
+        var serializedData = await serializer.SerializeAsync(data).ConfigureAwait(false);
+        if (serializedData is null || serializedData.Length is 0)
+            throw new InvalidOperationException("Serialization failed to produce data.");
+
+        // Store the serialized data in the container
+        _container.Data = serializedData;
+        _container.ComputeAndSetHash();
+
 
         return _container;
-    }
-
-    private void ValidateContainerSetup()
-    {
-        if (_container is null)
-            throw new InvalidOperationException("No container is set.");
-
-        if (_container.Data is not null && _container.Data.Length != 0 &&
-            _container._flagManager.IsFlagSet("IsDataSet")) return;
-        if (!_container._flagManager.IsFlagSet("IsTemporaryDataSet"))
-            throw new InvalidOperationException("No data is set in the container.");
-    }
-
-    private void ConfigureBuilder(SerializationBuilder builder)
-    {
-        // Configure serializer if flag is set and provider is available
-        if (_container._flagManager.IsFlagSet("ShouldSerialize"))
-        {
-            if (_serializationProvider is null)
-                throw new InvalidOperationException("No serialization provider is set.");
-            builder.WithSerializer(_serializationProvider);
-            _container.SerializerType = _serializationProvider.GetType();
-        }
-
-        // Configure compression if flag is set and provider is available
-        if (_container._flagManager.IsFlagSet("ShouldCompress"))
-        {
-            if (_compressionProvider is null)
-                throw new InvalidOperationException("No compression provider is set.");
-            builder.WithCompression(_compressionProvider);
-            _container.CompressionType = _compressionProvider.GetType();
-        }
-
-        // Configure encryption if flag is set and provider is available
-        if (!_container._flagManager.IsFlagSet("ShouldEncrypt")) return;
-        if (_encryptionProvider is null)
-            throw new InvalidOperationException("No encryption provider is set.");
-        builder.WithEncryption(_encryptionProvider);
-        _container.EncryptionType = _encryptionProvider.GetType();
     }
 }

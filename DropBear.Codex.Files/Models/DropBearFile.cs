@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
 
 namespace DropBear.Codex.Files.Models;
@@ -6,22 +7,23 @@ public class DropBearFile
 {
     public DropBearFile()
     {
-        // Empty constructor for deserialization
+        // Initialize the collections in the constructor
+        ContentContainers = new ObservableCollection<ContentContainer>();
+        Versions = new ObservableCollection<FileVersion>();
     }
 
-    // JSON constructor for detailed creation
     [JsonConstructor]
     public DropBearFile(
         Dictionary<string, string>? metadata,
-        List<ContentContainer>? contentContainers,
-        List<FileVersion>? versions,
+        Collection<ContentContainer>? contentContainers,
+        Collection<FileVersion>? versions,
         string baseFilePath,
         string fileName,
         FileVersion? currentVersion)
     {
         Metadata = metadata ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        ContentContainers = contentContainers ?? new List<ContentContainer>();
-        Versions = versions ?? new List<FileVersion>();
+        ContentContainers = contentContainers ?? new ObservableCollection<ContentContainer>();
+        Versions = versions ?? new ObservableCollection<FileVersion>();
         BaseFilePath = baseFilePath;
         FileName = fileName;
         CurrentVersion = currentVersion;
@@ -34,12 +36,12 @@ public class DropBearFile
 
     // Using attributes on properties to guide serialization
     [JsonPropertyName("metadata")]
-    public Dictionary<string, string> Metadata { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, string> Metadata { get; init; } = new(StringComparer.OrdinalIgnoreCase);
 
     [JsonPropertyName("contentContainers")]
-    public List<ContentContainer> ContentContainers { get; set; } = new();
+    public Collection<ContentContainer> ContentContainers { get; set; }
 
-    [JsonPropertyName("versions")] public List<FileVersion> Versions { get; set; } = new();
+    [JsonPropertyName("versions")] public Collection<FileVersion> Versions { get; set; }
 
     [JsonPropertyName("currentVersion")] public FileVersion? CurrentVersion { get; set; }
 
@@ -51,7 +53,7 @@ public class DropBearFile
         if (!Metadata.TryAdd(key, value))
             throw new ArgumentException("Duplicate metadata key.", nameof(key));
     }
-    
+
     public void RemoveMetadata(string key)
     {
         if (!Metadata.Remove(key))
@@ -63,7 +65,7 @@ public class DropBearFile
         ArgumentNullException.ThrowIfNull(container, nameof(container));
         ContentContainers.Add(container);
     }
-    
+
     public void RemoveContentContainer(ContentContainer container)
     {
         if (!ContentContainers.Remove(container))
@@ -82,9 +84,9 @@ public class DropBearFile
     {
         ArgumentNullException.ThrowIfNull(version, nameof(version));
         Versions.Add(version);
-        CurrentVersion = version; // Optionally set the latest added version as the current version
+        CurrentVersion = version;
     }
-    
+
     public FileVersion CreateFileVersion(string versionLabel, DateTimeOffset versionDate)
     {
         var baseFilePath = BaseFilePath;
@@ -93,26 +95,26 @@ public class DropBearFile
         var deltaPath = Path.Combine(baseFilePath, $"{FileName}.{versionLabel}.delta");
         var signaturePath = Path.Combine(baseFilePath, $"{FileName}.{versionLabel}.sig");
 
-        return new FileVersion(versionLabel, versionDate, currentFilePath, newFilePath, deltaPath, signaturePath, baseFilePath);
+        return new FileVersion(versionLabel, versionDate, currentFilePath, newFilePath, deltaPath, signaturePath,
+            baseFilePath);
     }
-    
+
     public override bool Equals(object? obj)
     {
         if (obj is DropBearFile other)
-        {
-            return BaseFilePath == other.BaseFilePath &&
+            return CurrentVersion is not null &&
+                   BaseFilePath == other.BaseFilePath &&
                    FileName == other.FileName &&
                    CurrentVersion.Equals(other.CurrentVersion) &&
                    Metadata.SequenceEqual(other.Metadata) &&
                    Versions.SequenceEqual(other.Versions) &&
                    ContentContainers.SequenceEqual(other.ContentContainers);
-        }
         return false;
     }
 
     public override int GetHashCode()
     {
-        HashCode hash = new HashCode();
+        var hash = new HashCode();
         hash.Add(BaseFilePath);
         hash.Add(FileName);
         hash.Add(CurrentVersion);
@@ -121,15 +123,9 @@ public class DropBearFile
             hash.Add(item.Key);
             hash.Add(item.Value);
         }
-        foreach (var version in Versions)
-        {
-            hash.Add(version);
-        }
-        foreach (var container in ContentContainers)
-        {
-            hash.Add(container);
-        }
+
+        foreach (var version in Versions) hash.Add(version);
+        foreach (var container in ContentContainers) hash.Add(container);
         return hash.ToHashCode();
     }
-
 }

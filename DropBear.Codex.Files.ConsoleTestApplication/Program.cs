@@ -4,8 +4,6 @@ using DropBear.Codex.Files.Services;
 using DropBear.Codex.Serialization.Providers;
 using DropBear.Codex.Serialization.Serializers;
 using MessagePack;
-using MessagePackSerializer = DropBear.Codex.Serialization.Serializers.MessagePackSerializer;
-
 
 namespace DropBear.Codex.Files.ConsoleTestApplication;
 
@@ -67,7 +65,9 @@ internal class Program
         //var deserializedContent = MessagePackSerializer.Deserialize<TestFile>(serializedContent);
         return await new ContentContainerBuilder()
             .WithObject(content)
-            .WithSerializer<MessagePackSerializer>()
+            .WithSerializer<JsonSerializer>()
+            .WithCompression<GZipCompressionProvider>()
+            .WithEncryption<AESGCMEncryptionProvider>()
             .BuildAsync();
     }
 #pragma warning restore CA1416

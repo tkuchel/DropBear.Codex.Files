@@ -23,7 +23,9 @@ public class ContentContainer
 
     [JsonPropertyName("contentType")] public string ContentType { get; private set; } = "Unsupported/Unknown DataType";
 
+#pragma warning disable CA1819
     [JsonPropertyName("data")] public byte[]? Data { get; internal set; }
+#pragma warning restore CA1819
 
     [JsonPropertyName("hash")] public string? Hash { get; private set; }
 
@@ -184,7 +186,7 @@ public class ContentContainer
     // Adding internal methods to set private properties
     internal void SetContentType(string type) => ContentType = type;
 
-    internal void SetHash(string hash) => Hash = hash;
+    internal void SetHash(string? hash) => Hash = hash;
 
     public override bool Equals(object? obj)
     {

@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using DropBear.Codex.Files.Extensions;
@@ -7,6 +8,7 @@ using Microsoft.IO;
 
 namespace DropBear.Codex.Files.Services;
 
+[SupportedOSPlatform("windows")]
 public class FileManager
 {
     private readonly IBlobStorage? _blobStorage;

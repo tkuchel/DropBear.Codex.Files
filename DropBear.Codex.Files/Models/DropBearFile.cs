@@ -1,8 +1,9 @@
 using System.Collections.ObjectModel;
+using System.Runtime.Versioning;
 using System.Text.Json.Serialization;
 
 namespace DropBear.Codex.Files.Models;
-
+[SupportedOSPlatform("windows")]
 public class DropBearFile
 {
     public DropBearFile()

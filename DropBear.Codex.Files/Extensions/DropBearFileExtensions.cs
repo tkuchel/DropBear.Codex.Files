@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using System.Text;
 using System.Text.Json;
 using DropBear.Codex.Files.Converters;
@@ -5,6 +6,7 @@ using DropBear.Codex.Files.Models;
 
 namespace DropBear.Codex.Files.Extensions;
 
+[SupportedOSPlatform("windows")]
 public static class DropBearFileExtensions
 {
     private static readonly JsonSerializerOptions Options = new()

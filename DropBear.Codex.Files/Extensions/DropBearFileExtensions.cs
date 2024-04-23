@@ -1,35 +1,100 @@
 using System.Text;
+using System.Text.Json;
+using DropBear.Codex.Files.Converters;
 using DropBear.Codex.Files.Models;
-using Microsoft.IO;
-using Newtonsoft.Json;
 
 namespace DropBear.Codex.Files.Extensions;
 
 public static class DropBearFileExtensions
 {
-    private static readonly RecyclableMemoryStreamManager StreamManager = new();
-
-    public static Stream ToStream(this DropBearFile file)
+    private static readonly JsonSerializerOptions Options = new()
     {
-        var stream = StreamManager.GetStream("DropBearFileToStream");
-        using (var streamWriter = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), 1024, leaveOpen: true))
-        using (var jsonWriter = new JsonTextWriter(streamWriter))
+        Converters = { new TypeConverter(), new ContentContainerConverter() }, WriteIndented = true
+    };
+
+    public static MemoryStream ToStream(this DropBearFile file)
+    {
+        if (file is null)
+            throw new ArgumentNullException(nameof(file), "Cannot serialize a null DropBearFile object.");
+
+        string jsonString;
+
+        try
         {
-            var serializer = new JsonSerializer();
-            serializer.Serialize(jsonWriter, file);
-            jsonWriter.Flush(); // Ensure all data is written to the stream
+            jsonString = JsonSerializer.Serialize(file, Options);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException("Serialization failed.", ex);
         }
 
-        stream.Position = 0; // Reset the position for reading
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes(jsonString));
         return stream;
     }
 
+    public static async Task<MemoryStream> ToStreamAsync(this DropBearFile file)
+    {
+        if (file is null)
+            throw new ArgumentNullException(nameof(file), "Cannot serialize a null DropBearFile object.");
+
+        var stream = new MemoryStream();
+        try
+        {
+            await JsonSerializer.SerializeAsync(stream, file, Options).ConfigureAwait(false);
+            stream.Position = 0; // Reset position after writing
+            return stream;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException("Serialization failed.", ex);
+        }
+    }
+
+
     public static DropBearFile FromStream(Stream stream)
     {
-        using var streamReader = new StreamReader(stream);
-        using var jsonReader = new JsonTextReader(streamReader);
-        var serializer = new JsonSerializer();
-        return serializer.Deserialize<DropBearFile>(jsonReader) ??
-               throw new InvalidOperationException("Failed to deserialize DropBearFile from stream.");
+        if (stream is null)
+            throw new ArgumentNullException(nameof(stream), "Cannot deserialize from a null stream.");
+
+        if (!stream.CanRead)
+            throw new NotSupportedException("Stream must be readable.");
+
+        try
+        {
+            stream.Position = 0; // Reset the position to ensure correct reading from start
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            var jsonString = reader.ReadToEnd();
+            var file = JsonSerializer.Deserialize<DropBearFile>(jsonString, Options);
+
+            if (file is null)
+                throw new InvalidOperationException("Deserialization resulted in a null object.");
+
+            return file;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException("Deserialization failed.", ex);
+        }
+    }
+
+    public static async Task<DropBearFile> FromStreamAsync(Stream stream)
+    {
+        if (stream is null)
+            throw new ArgumentNullException(nameof(stream), "Cannot deserialize from a null stream.");
+        if (!stream.CanRead)
+            throw new NotSupportedException("Stream must be readable.");
+
+        try
+        {
+            stream.Position = 0; // Ensure stream is at the beginning
+            var file = await JsonSerializer.DeserializeAsync<DropBearFile>(stream, Options).ConfigureAwait(false);
+            if (file is null)
+                throw new InvalidOperationException("Deserialization resulted in a null object.");
+            return file;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException("Deserialization failed.", ex);
+        }
     }
 }

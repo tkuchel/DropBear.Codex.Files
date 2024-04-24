@@ -1,204 +1,122 @@
 using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
+using DropBear.Codex.Files.Enums;
 using DropBear.Codex.Files.Extensions;
 using DropBear.Codex.Files.Models;
-using FluentStorage.Blobs;
-using Microsoft.IO;
+using DropBear.Codex.Files.StorageManagers;
 
 namespace DropBear.Codex.Files.Services;
 
 [SupportedOSPlatform("windows")]
 public class FileManager
 {
-    private readonly IBlobStorage? _blobStorage;
+    private readonly BlobStorageManager? _blobStorageManager;
     private readonly bool _isWindows = OperatingSystem.IsWindows();
-    private readonly RecyclableMemoryStreamManager _memoryStreamManager;
+    private readonly LocalStorageManager? _localStorageManager;
+    private readonly StorageStrategy _storageStrategy;
 
-    internal FileManager(RecyclableMemoryStreamManager memoryStreamManager, IBlobStorage? blobStorage = null)
+    internal FileManager(StorageStrategy storageStrategy,
+        LocalStorageManager? localStorageManager = null, BlobStorageManager? blobStorageManager = null)
     {
         if (!_isWindows)
             throw new PlatformNotSupportedException("FileManager is only supported on Windows.");
 
-        _memoryStreamManager = memoryStreamManager;
-        _blobStorage = blobStorage;
+        _blobStorageManager = blobStorageManager;
+        _localStorageManager = localStorageManager;
+        _storageStrategy = storageStrategy;
     }
 
-    private bool UseBlobStorage => _blobStorage is not null;
+    #region Public Methods
 
-    public static async Task WriteToFileAsync(DropBearFile file)
+    public async Task WriteToFileAsync(DropBearFile file, string fullPath)
     {
-        ValidateFilePath(file);
-
+        ValidateFilePath(fullPath);
         var stream = await file.ToStreamAsync().ConfigureAwait(false);
 
-        var fileStream = new FileStream(file.FullPath, FileMode.Create, FileAccess.Write);
-        await using (fileStream.ConfigureAwait(false))
+        switch (_storageStrategy)
         {
-            await stream.CopyToAsync(fileStream).ConfigureAwait(false);
+            case StorageStrategy.BlobOnly:
+                await WriteToBlobStorage(fullPath, stream).ConfigureAwait(false);
+                break;
+            case StorageStrategy.LocalOnly:
+                await WriteToLocalStorage(fullPath, stream).ConfigureAwait(false);
+                break;
+            case StorageStrategy.Both:
+                await WriteToBlobStorage(fullPath, stream).ConfigureAwait(false);
+                stream.Position = 0;  // Reset position before next write
+                await WriteToLocalStorage(fullPath, stream).ConfigureAwait(false);
+                break;
         }
     }
 
-    public static async Task<DropBearFile> ReadFromFileAsync(string fullPath)
+    public async Task<DropBearFile> ReadFromFileAsync(string fullPath)
     {
-        if (string.IsNullOrEmpty(fullPath))
-            throw new InvalidOperationException("Local path is not configured.");
-
-        if (!File.Exists(fullPath))
-            throw new FileNotFoundException("The specified file does not exist.", fullPath);
-
-        var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read);
-        await using (fileStream.ConfigureAwait(false))
+        ValidateFilePath(fullPath);
+        Stream? stream = null;
+        stream = _storageStrategy switch
         {
-            return await DropBearFileExtensions.FromStreamAsync(fileStream).ConfigureAwait(false);
-        }
+            StorageStrategy.BlobOnly => await ReadFromBlobStorage(fullPath).ConfigureAwait(false),
+            StorageStrategy.LocalOnly => await ReadFromLocalStorage(fullPath).ConfigureAwait(false),
+            StorageStrategy.Both => await ReadFromBlobStorage(fullPath) // Default to blob if both
+                .ConfigureAwait(false),
+            _ => null
+        };
+
+        if (stream is null)
+            throw new InvalidOperationException("Failed to read file.");
+
+        return await DropBearFileExtensions.FromStreamAsync(stream).ConfigureAwait(false);
     }
 
-    public async Task WriteToBlobAsync(DropBearFile file, string blobName)
+    public async Task UpdateFileAsync(DropBearFile file, string fullPath)
     {
-        if (!UseBlobStorage)
-            throw new InvalidOperationException("Blob storage is not enabled.");
-
-        if (_blobStorage is null)
-            throw new InvalidOperationException("Blob storage is not configured.");
-
+        ValidateFilePath(fullPath);
         var stream = await file.ToStreamAsync().ConfigureAwait(false);
-        using (stream)
+
+        switch (_storageStrategy)
         {
-            await _blobStorage.WriteAsync(blobName, stream).ConfigureAwait(false);
+            case StorageStrategy.BlobOnly:
+                await UpdateBlobStorage(fullPath, stream).ConfigureAwait(false);
+                break;
+            case StorageStrategy.LocalOnly:
+                await UpdateLocalStorage(fullPath, stream).ConfigureAwait(false);
+                break;
+            case StorageStrategy.Both:
+                await Task.WhenAll(UpdateBlobStorage(fullPath, stream), UpdateLocalStorage(fullPath, stream))
+                    .ConfigureAwait(false);
+                break;
+        }
+
+    }
+    
+    public async Task DeleteFileAsync(string fullPath)
+    {
+        ValidateFilePath(fullPath);
+
+        switch (_storageStrategy)
+        {
+            case StorageStrategy.BlobOnly:
+                await DeleteFromBlobStorage(fullPath).ConfigureAwait(false);
+                break;
+            case StorageStrategy.LocalOnly:
+                await DeleteFromLocalStorage(fullPath).ConfigureAwait(false);
+                break;
+            case StorageStrategy.Both:
+                await Task.WhenAll(DeleteFromBlobStorage(fullPath), DeleteFromLocalStorage(fullPath))
+                    .ConfigureAwait(false);
+                break;
         }
     }
 
-    public async Task<DropBearFile> ReadFromBlobAsync(string blobName)
+    #endregion
+
+
+    #region Private Methods
+
+    private static void ValidateFilePath(string fullPath)
     {
-        if (!UseBlobStorage)
-            throw new InvalidOperationException("Blob storage is not enabled.");
-
-        if (_blobStorage is null)
-            throw new InvalidOperationException("Blob storage is not configured.");
-
-        var stream = _memoryStreamManager.GetStream();
-        await using (stream.ConfigureAwait(false))
-        {
-            var blobStream = await _blobStorage.OpenReadAsync(blobName).ConfigureAwait(false);
-            await using (blobStream.ConfigureAwait(false))
-            {
-                await blobStream.CopyToAsync(stream).ConfigureAwait(false);
-                stream.Position = 0; // Reset stream position to read from the beginning
-                return await DropBearFileExtensions.FromStreamAsync(stream).ConfigureAwait(false);
-            }
-        }
-    }
-
-    public static Task DeleteFileAsync(DropBearFile file)
-    {
-        if (string.IsNullOrEmpty(file.FullPath))
-            throw new InvalidOperationException("Local path is not configured.");
-
-        if (File.Exists(file.FullPath))
-            File.Delete(file.FullPath);
-
-        return Task.CompletedTask;
-    }
-
-    public async Task UpdateBlobAsync(DropBearFile file, string blobName, string versionLabel)
-    {
-        if (!UseBlobStorage)
-            throw new InvalidOperationException("Blob storage is not enabled.");
-
-        if (_blobStorage is null)
-            throw new InvalidOperationException("Blob storage is not configured.");
-
-        var tempLocalPath = Path.GetTempFileName();
-        var newLocalPath = tempLocalPath + ".new";
-        var deltaFilePath = tempLocalPath + ".delta";
-        var signatureFilePath = tempLocalPath + ".sig";
-
-        // Download current blob to a local file
-        await DownloadBlobToLocalAsync(blobName, tempLocalPath).ConfigureAwait(false);
-
-        // Save new version temporarily locally
-        var newFileStream = await file.ToStreamAsync().ConfigureAwait(false);
-        await using (newFileStream.ConfigureAwait(false))
-        {
-#pragma warning disable MA0004
-            await using var localFileStream = new FileStream(newLocalPath, FileMode.Create, FileAccess.Write);
-#pragma warning restore MA0004
-            await newFileStream.CopyToAsync(localFileStream).ConfigureAwait(false);
-        }
-
-        // Create a new FileVersion object, generate delta, apply it
-        var fileVersion = file.CreateFileVersion(versionLabel, DateTimeOffset.UtcNow);
-        fileVersion.CreateDelta();
-        fileVersion.ApplyDelta();
-
-        // Upload updated file back to blob
-        await UploadFileToBlobAsync(newLocalPath, blobName).ConfigureAwait(false);
-
-        // Cleanup: Delete temporary files
-        File.Delete(tempLocalPath);
-        File.Delete(newLocalPath);
-        File.Delete(deltaFilePath);
-        File.Delete(signatureFilePath);
-    }
-
-    public async Task DeleteBlobAsync(string blobName)
-    {
-        if (!UseBlobStorage)
-            throw new InvalidOperationException("Blob storage is not enabled.");
-
-        if (_blobStorage is null)
-            throw new InvalidOperationException("Blob storage is not configured.");
-
-        await _blobStorage.DeleteAsync(blobName).ConfigureAwait(false);
-    }
-
-    private async Task DownloadBlobToLocalAsync(string blobName, string localPath)
-    {
-        if (!UseBlobStorage)
-            throw new InvalidOperationException("Blob storage is not enabled.");
-
-        if (_blobStorage is null)
-            throw new InvalidOperationException("Blob storage is not configured.");
-
-        var blobStream = await _blobStorage.OpenReadAsync(blobName).ConfigureAwait(false);
-        await using (blobStream.ConfigureAwait(false))
-        {
-            var localFileStream = new FileStream(localPath, FileMode.Create, FileAccess.Write);
-            await using (localFileStream.ConfigureAwait(false))
-            {
-                await blobStream.CopyToAsync(localFileStream).ConfigureAwait(false);
-            }
-        }
-    }
-
-    public async Task UploadFileToBlobAsync(string localFilePath, string blobName)
-    {
-        if (!UseBlobStorage)
-            throw new InvalidOperationException("Blob storage is not enabled.");
-
-        if (_blobStorage is null)
-            throw new InvalidOperationException("Blob storage is not configured.");
-
-        if (string.IsNullOrEmpty(localFilePath))
-            throw new ArgumentException("Local file path cannot be null or empty.", nameof(localFilePath));
-
-        if (string.IsNullOrEmpty(blobName))
-            throw new ArgumentException("Blob name cannot be null or empty.", nameof(blobName));
-
-        if (!File.Exists(localFilePath))
-            throw new FileNotFoundException("The specified file does not exist.", localFilePath);
-
-        var fileStream = new FileStream(localFilePath, FileMode.Open, FileAccess.Read);
-        await using (fileStream.ConfigureAwait(false))
-        {
-            await _blobStorage.WriteAsync(blobName, fileStream).ConfigureAwait(false);
-        }
-    }
-
-    private static void ValidateFilePath(DropBearFile file)
-    {
-        var directoryPath = Path.GetDirectoryName(file.FullPath) ??
+        var directoryPath = Path.GetDirectoryName(fullPath) ??
                             throw new InvalidOperationException("Invalid file path.");
 
         if (!Directory.Exists(directoryPath))
@@ -208,18 +126,15 @@ public class FileManager
         }
 
         if (HasWritePermissionOnDir(directoryPath)) return;
-#pragma warning disable CA1416
         Console.WriteLine("Attempting to add write permissions to the directory.");
         var currentUser = WindowsIdentity.GetCurrent().Name;
         AddDirectorySecurity(directoryPath, currentUser, FileSystemRights.WriteData, AccessControlType.Allow);
         if (!HasWritePermissionOnDir(directoryPath))
             throw new UnauthorizedAccessException("Failed to set necessary write permissions.");
-#pragma warning restore CA1416
     }
 
     private static bool HasWritePermissionOnDir(string path)
     {
-#pragma warning disable CA1416
         var dInfo = new DirectoryInfo(path);
         var dSecurity = dInfo.GetAccessControl();
         var rules = dSecurity.GetAccessRules(true, true, typeof(SecurityIdentifier));
@@ -227,19 +142,90 @@ public class FileManager
             if ((rule.FileSystemRights & FileSystemRights.WriteData) is not FileSystemRights.WriteData)
                 if (rule.AccessControlType is AccessControlType.Allow)
                     return true;
-#pragma warning restore CA1416
         return false;
     }
 
     private static void AddDirectorySecurity(string path, string account, FileSystemRights rights,
         AccessControlType controlType)
     {
-#pragma warning disable CA1416
         var dInfo = new DirectoryInfo(path);
         var dSecurity = dInfo.GetAccessControl();
         dSecurity.AddAccessRule(new FileSystemAccessRule(account, rights,
             InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, controlType));
         dInfo.SetAccessControl(dSecurity);
-#pragma warning restore CA1416
     }
+
+    #endregion
+
+    #region Storage Helper Methods
+
+    // Helper methods for each storage operation, each encapsulating the necessary logic for that storage type
+    private async Task WriteToBlobStorage(string fullPath, Stream stream)
+    {
+        var containerName = Path.GetDirectoryName(fullPath)?.Replace(@"\", "/", StringComparison.OrdinalIgnoreCase);
+        var blobName = Path.GetFileName(fullPath);
+        if (_blobStorageManager is not null)
+            if (containerName is not null)
+                await _blobStorageManager.WriteAsync(blobName, stream, containerName).ConfigureAwait(false);
+    }
+
+    private async Task WriteToLocalStorage(string fullPath, Stream stream)
+    {
+        if (_localStorageManager is not null)
+            await _localStorageManager.WriteAsync(Path.GetFileName(fullPath), stream, Path.GetDirectoryName(fullPath))
+                .ConfigureAwait(false);
+    }
+
+    private async Task<Stream> ReadFromBlobStorage(string fullPath)
+    {
+        var containerName = Path.GetDirectoryName(fullPath)?.Replace(@"\", "/", StringComparison.OrdinalIgnoreCase);
+        var blobName = Path.GetFileName(fullPath);
+        if (_blobStorageManager is null) throw new InvalidOperationException("Blob storage manager is not set.");
+        if (containerName is not null)
+            return await _blobStorageManager.ReadAsync(blobName, containerName).ConfigureAwait(false);
+
+        throw new InvalidOperationException("Container name is null.");
+    }
+
+    private async Task<Stream> ReadFromLocalStorage(string fullPath)
+    {
+        if (_localStorageManager is null) throw new InvalidOperationException("Local storage manager is not set.");
+        return await _localStorageManager.ReadAsync(Path.GetFileName(fullPath), Path.GetDirectoryName(fullPath))
+            .ConfigureAwait(false);
+    }
+
+    private async Task UpdateBlobStorage(string fullPath, Stream stream)
+    {
+        var containerName = Path.GetDirectoryName(fullPath)?.Replace(@"\", "/", StringComparison.OrdinalIgnoreCase);
+        var blobName = Path.GetFileName(fullPath);
+        if (_blobStorageManager is not null)
+            if (containerName is not null)
+                await _blobStorageManager.UpdateBlobAsync(blobName, stream, containerName).ConfigureAwait(false);
+    }
+
+    private async Task UpdateLocalStorage(string fullPath, Stream stream)
+    {
+        if (_localStorageManager is not null)
+            await _localStorageManager.UpdateAsync(Path.GetFileName(fullPath), stream, Path.GetDirectoryName(fullPath))
+                .ConfigureAwait(false);
+    }
+    
+
+    private async Task DeleteFromBlobStorage(string fullPath)
+    {
+        var containerName = Path.GetDirectoryName(fullPath)?.Replace(@"\", "/", StringComparison.OrdinalIgnoreCase);
+        var blobName = Path.GetFileName(fullPath);
+        if (_blobStorageManager is not null)
+            if (containerName is not null)
+                await _blobStorageManager.DeleteAsync(blobName, containerName).ConfigureAwait(false);
+    }
+
+    private async Task DeleteFromLocalStorage(string fullPath)
+    {
+        if (_localStorageManager is not null)
+            await _localStorageManager.DeleteAsync(Path.GetFileName(fullPath), Path.GetDirectoryName(fullPath))
+                .ConfigureAwait(false);
+    }
+
+    #endregion
 }

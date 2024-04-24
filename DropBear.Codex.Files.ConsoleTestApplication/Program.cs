@@ -1,9 +1,10 @@
 ﻿using DropBear.Codex.Files.Builders;
+using DropBear.Codex.Files.Enums;
 using DropBear.Codex.Files.Models;
-using DropBear.Codex.Files.Services;
 using DropBear.Codex.Serialization.Providers;
 using DropBear.Codex.Serialization.Serializers;
 using MessagePack;
+using Microsoft.IO;
 
 namespace DropBear.Codex.Files.ConsoleTestApplication;
 
@@ -12,26 +13,43 @@ internal class Program
 #pragma warning disable CA1416
     public static async Task Main(string[] args)
     {
-        var fileManager = new FileManagerBuilder()
+        var accountKey = "mTjW+GVizDXiEGMvUjGRNVlYRc82+O9f19JfdeUmvASBNaR/Y5y9L8srQ7nac6nLejZDUUC3wBFg+ASt3LHc1A==";
+        var accountName = "mochadatabasestorage";
+        var containerName = "dropbearfiles";
+
+        var fileManager = FileManagerBuilder.Create()
+            .WithMemoryStreamManager(new RecyclableMemoryStreamManager())
+            .WithBlobStorage(accountName, accountKey, containerName)
+            .WithStorageStrategy(StorageStrategy.BlobOnly)
+            .Configure()
             .Build();
+        
+        // var fileManager = FileManagerBuilder.Create()
+        //     .WithMemoryStreamManager(new RecyclableMemoryStreamManager())
+        //     .WithBlobStorage(accountName, accountKey, containerName)
+        //     .WithLocalStorage("C:\\Temp")
+        //     .WithStorageStrategy(StorageStrategy.Both)
+        //     .Configure()
+        //     .Build();
+
 
         // Asynchronously create a content container
         var contentContainer = await CreateTestContentContainer();
 
         var dropBearFile = new DropBearFileBuilder()
             .SetFileName("test")
-            .SetBaseFilePath(@"C:\Temp")
             .AddMetadata("Author", "John Doe")
             .AddContentContainer(contentContainer)
             .SetInitialVersion("v1.0", DateTimeOffset.UtcNow)
             .Build();
 
-        await FileManager.WriteToFileAsync(dropBearFile);
-        var readBackDropBearFile = await FileManager.ReadFromFileAsync(dropBearFile.FullPath);
+        var fullLocalPath = Path.Combine("C:\\Temp", dropBearFile.FileName + DropBearFile.GetDefaultExtension());
+        var fullBlobPath = Path.Combine(containerName, dropBearFile.FileName + DropBearFile.GetDefaultExtension());
 
-        //DropBearFileComparer.CompareDropBearFiles(dropBearFile, readBackDropBearFile);
+        await fileManager.WriteToFileAsync(dropBearFile, fullBlobPath);
+        var readBackDropBearFile = await fileManager.ReadFromFileAsync(fullBlobPath);
 
-        //TestTypeSerialization();
+        DropBearFileComparer.CompareDropBearFiles(dropBearFile, readBackDropBearFile);
 
         if (readBackDropBearFile.ContentContainers.Any())
         {

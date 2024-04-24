@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.Json.Serialization;
 using DropBear.Codex.Core;
 using DropBear.Codex.Files.Enums;
-using DropBear.Codex.Files.Extensions;
 using DropBear.Codex.Serialization.Factories;
 using DropBear.Codex.Utilities.Extensions;
 using DropBear.Codex.Utilities.Hashing.Factories;

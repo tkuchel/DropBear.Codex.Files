@@ -9,7 +9,7 @@ public class TypeConverter : JsonConverter<Type>
     public override Type? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         var typeName = reader.GetString();
-        return typeName is null ? null : Type.GetType(typeName, AssemblyResolver, typeResolver: null);
+        return typeName is null ? null : Type.GetType(typeName, AssemblyResolver, null);
 
         static Assembly AssemblyResolver(AssemblyName assemblyName)
         {

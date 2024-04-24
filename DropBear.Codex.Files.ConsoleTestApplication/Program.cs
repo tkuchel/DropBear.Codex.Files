@@ -13,9 +13,9 @@ internal class Program
 #pragma warning disable CA1416
     public static async Task Main(string[] args)
     {
-        var accountKey = "YOUR_ACCOUNT_KEY";
-        var accountName = "YOUR_ACCOUNT_NAME";
-        var containerName = "YOUR_CONTAINER_NAME";
+        var accountKey = "mTjW+GVizDXiEGMvUjGRNVlYRc82+O9f19JfdeUmvASBNaR/Y5y9L8srQ7nac6nLejZDUUC3wBFg+ASt3LHc1A==";
+        var accountName = "mochadatabasestorage";
+        var containerName = "dropbearfiles";
 
         var fileManager = FileManagerBuilder.Create()
             .WithMemoryStreamManager(new RecyclableMemoryStreamManager())

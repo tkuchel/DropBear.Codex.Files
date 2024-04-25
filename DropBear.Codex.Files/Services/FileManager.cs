@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
+using DropBear.Codex.Core;
 using DropBear.Codex.Files.Enums;
 using DropBear.Codex.Files.Extensions;
 using DropBear.Codex.Files.Models;
@@ -29,88 +30,117 @@ public class FileManager
 
     #region Public Methods
 
-    public async Task WriteToFileAsync(DropBearFile file, string fullPath)
+    public async Task<Result> WriteToFileAsync(DropBearFile file, string fullPath)
     {
-        ValidateFilePath(fullPath);
-        var stream = await file.ToStreamAsync().ConfigureAwait(false);
-
-        switch (_storageStrategy)
+        try
         {
-            case StorageStrategy.BlobOnly:
-                await WriteToBlobStorage(fullPath, stream).ConfigureAwait(false);
-                break;
-            case StorageStrategy.LocalOnly:
-                await WriteToLocalStorage(fullPath, stream).ConfigureAwait(false);
-                break;
-            case StorageStrategy.Both:
-                await WriteToBlobStorage(fullPath, stream).ConfigureAwait(false);
-                stream.Position = 0;  // Reset position before next write
-                await WriteToLocalStorage(fullPath, stream).ConfigureAwait(false);
-                break;
+            ValidateFilePath(fullPath);
+            var stream = await file.ToStreamAsync().ConfigureAwait(false);
+
+            switch (_storageStrategy)
+            {
+                case StorageStrategy.BlobOnly:
+                    await WriteToBlobStorage(fullPath, stream).ConfigureAwait(false);
+                    break;
+                case StorageStrategy.LocalOnly:
+                    await WriteToLocalStorage(fullPath, stream).ConfigureAwait(false);
+                    break;
+                case StorageStrategy.NoOperation:
+                    break;
+                default:
+                    return Result.Failure("Invalid storage strategy.");
+            }
+
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure(ex.Message,ex);
         }
     }
 
-    public async Task<DropBearFile> ReadFromFileAsync(string fullPath)
+    public async Task<Result<DropBearFile>> ReadFromFileAsync(string fullPath)
     {
-        ValidateFilePath(fullPath);
-        Stream? stream = null;
-        stream = _storageStrategy switch
+        try
         {
-            StorageStrategy.BlobOnly => await ReadFromBlobStorage(fullPath).ConfigureAwait(false),
-            StorageStrategy.LocalOnly => await ReadFromLocalStorage(fullPath).ConfigureAwait(false),
-            StorageStrategy.Both => await ReadFromBlobStorage(fullPath) // Default to blob if both
-                .ConfigureAwait(false),
-            _ => null
-        };
+            ValidateFilePath(fullPath);
+            var stream = _storageStrategy switch
+            {
+                StorageStrategy.NoOperation => null,
+                StorageStrategy.BlobOnly => await ReadFromBlobStorage(fullPath).ConfigureAwait(false),
+                StorageStrategy.LocalOnly => await ReadFromLocalStorage(fullPath).ConfigureAwait(false),
+                _ => null
+            };
 
-        if (stream is null)
-            throw new InvalidOperationException("Failed to read file.");
+            if (stream is null)
+                return Result<DropBearFile>.Failure("Failed to read file. Stream is null.");
 
-        return await DropBearFileExtensions.FromStreamAsync(stream).ConfigureAwait(false);
+            return await DropBearFileExtensions.FromStreamAsync(stream).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            return Result<DropBearFile>.Failure(ex.Message,ex);
+        }
     }
 
-    public async Task UpdateFileAsync(DropBearFile file, string fullPath)
+    public async Task<Result> UpdateFileAsync(DropBearFile file, string fullPath)
     {
-        ValidateFilePath(fullPath);
-        var stream = await file.ToStreamAsync().ConfigureAwait(false);
-
-        switch (_storageStrategy)
+        try
         {
-            case StorageStrategy.BlobOnly:
-                await UpdateBlobStorage(fullPath, stream).ConfigureAwait(false);
-                break;
-            case StorageStrategy.LocalOnly:
-                await UpdateLocalStorage(fullPath, stream).ConfigureAwait(false);
-                break;
-            case StorageStrategy.Both:
-                await Task.WhenAll(UpdateBlobStorage(fullPath, stream), UpdateLocalStorage(fullPath, stream))
-                    .ConfigureAwait(false);
-                break;
-        }
+            ValidateFilePath(fullPath);
+            var stream = await file.ToStreamAsync().ConfigureAwait(false);
 
+            switch (_storageStrategy)
+            {
+                case StorageStrategy.BlobOnly:
+                    await UpdateBlobStorage(fullPath, stream).ConfigureAwait(false);
+                    break;
+                case StorageStrategy.LocalOnly:
+                    await UpdateLocalStorage(fullPath, stream).ConfigureAwait(false);
+                    break;
+                case StorageStrategy.NoOperation:
+                    break;
+                default:
+                    return Result.Failure("Invalid storage strategy.");
+            }
+
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure(ex.Message,ex);
+        }
     }
     
-    public async Task DeleteFileAsync(string fullPath)
+    public async Task<Result> DeleteFileAsync(string fullPath)
     {
-        ValidateFilePath(fullPath);
-
-        switch (_storageStrategy)
+        try
         {
-            case StorageStrategy.BlobOnly:
-                await DeleteFromBlobStorage(fullPath).ConfigureAwait(false);
-                break;
-            case StorageStrategy.LocalOnly:
-                await DeleteFromLocalStorage(fullPath).ConfigureAwait(false);
-                break;
-            case StorageStrategy.Both:
-                await Task.WhenAll(DeleteFromBlobStorage(fullPath), DeleteFromLocalStorage(fullPath))
-                    .ConfigureAwait(false);
-                break;
+            ValidateFilePath(fullPath);
+
+            switch (_storageStrategy)
+            {
+                case StorageStrategy.BlobOnly:
+                    await DeleteFromBlobStorage(fullPath).ConfigureAwait(false);
+                    break;
+                case StorageStrategy.LocalOnly:
+                    await DeleteFromLocalStorage(fullPath).ConfigureAwait(false);
+                    break;
+                case StorageStrategy.NoOperation:
+                    break;
+                default:
+                    return Result.Failure("Invalid storage strategy.");
+            }
+
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure(ex.Message,ex);
         }
     }
 
     #endregion
-
 
     #region Private Methods
 

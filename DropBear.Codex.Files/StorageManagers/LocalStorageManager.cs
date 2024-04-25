@@ -2,7 +2,7 @@ using Microsoft.IO;
 
 namespace DropBear.Codex.Files.StorageManagers;
 
-public class LocalStorageManager
+public class LocalStorageManager 
 {
     private readonly string _baseDirectory;
     private readonly RecyclableMemoryStreamManager _memoryStreamManager;

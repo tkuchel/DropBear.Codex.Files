@@ -34,7 +34,7 @@ public static class DropBearFileExtensions
         return stream;
     }
 
-    public static async Task<MemoryStream> ToStreamAsync(this DropBearFile file)
+    public static async Task<MemoryStream?> ToStreamAsync(this DropBearFile file)
     {
         if (file is null)
             throw new ArgumentNullException(nameof(file), "Cannot serialize a null DropBearFile object.");

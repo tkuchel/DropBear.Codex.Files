@@ -17,7 +17,7 @@ public class LocalStorageManager
 
     public string GetBaseDirectory() => _baseDirectory;
 
-    public async Task WriteAsync(string fileName, Stream dataStream, string? subDirectory = null)
+    public async Task WriteAsync(string fileName, Stream? dataStream, string? subDirectory = null)
     {
         var directoryPath = Path.Combine(_baseDirectory, subDirectory ?? string.Empty);
         var fullPath = Path.Combine(directoryPath, fileName);
@@ -25,6 +25,9 @@ public class LocalStorageManager
         // Ensure directory exists
         if (!Directory.Exists(directoryPath)) Directory.CreateDirectory(directoryPath);
 
+        // Ensure data stream is not null
+        if (dataStream is null)
+            throw new ArgumentNullException(nameof(dataStream), "The data stream cannot be null.");
 
         if (dataStream.Length == 0)
             throw new InvalidOperationException("Attempting to write an empty stream to blob storage.");
@@ -84,7 +87,7 @@ public class LocalStorageManager
             throw new FileNotFoundException("The specified file does not exist.", fullPath);
     }
 
-    public async Task UpdateAsync(string fileName, Stream newDataStream, string? subDirectory = null)
+    public async Task UpdateAsync(string fileName, Stream? newDataStream, string? subDirectory = null)
     {
         var directoryPath = Path.Combine(_baseDirectory, subDirectory ?? string.Empty);
         var fullPath = Path.Combine(directoryPath, fileName);
@@ -95,6 +98,10 @@ public class LocalStorageManager
 
         // Delete existing file
         File.Delete(fullPath);
+        
+        // Check if the new data stream is null
+        if (newDataStream is null)
+            throw new ArgumentNullException(nameof(newDataStream), "The new data stream cannot be null.");
 
         // Write the new data
         var fileStream = new FileStream(fullPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, true);

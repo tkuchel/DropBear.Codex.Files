@@ -5,7 +5,7 @@ using DropBear.Codex.Core;
 using DropBear.Codex.Files.Enums;
 using DropBear.Codex.Serialization.Factories;
 using DropBear.Codex.Utilities.Extensions;
-using DropBear.Codex.Utilities.Hashing.Factories;
+using DropBear.Codex.Utilities.Hashing.Builder;
 using DropBear.Codex.Utilities.Hashing.Interfaces;
 
 namespace DropBear.Codex.Files.Models;
@@ -13,7 +13,7 @@ namespace DropBear.Codex.Files.Models;
 [SupportedOSPlatform("windows")]
 public class ContentContainer
 {
-    private readonly IHasher _hasher = new HashFactory().GetHasher("XxHash");
+    private readonly IHasher _hasher = new HashBuilder().GetHasher("XxHash");
     private readonly Dictionary<string, Type> _providers = new(StringComparer.OrdinalIgnoreCase);
 
     public ContentContainer() => Flags = ContentContainerFlags.NoOperation; // Start with NoOperation as default

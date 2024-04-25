@@ -18,7 +18,7 @@ public class BlobStorageManager
         _defaultContainerName = defaultContainerName;
     }
 
-    public async Task WriteAsync(string blobName, Stream dataStream, string containerName)
+    public async Task WriteAsync(string blobName, Stream? dataStream, string containerName)
     {
         // Ensure the container name defaults if not provided
         containerName = string.IsNullOrEmpty(containerName) ? _defaultContainerName : containerName;
@@ -28,6 +28,10 @@ public class BlobStorageManager
 
         // Validate the blob name and path using existing validation (updated to check full path length etc.)
         fullPath = ValidateBlobName(fullPath);
+        
+        // Ensure data stream is not null
+        if (dataStream is null)
+            throw new ArgumentNullException(nameof(dataStream), "The data stream cannot be null.");
 
         if (dataStream.Length == 0)
             throw new InvalidOperationException("Attempting to write an empty stream to blob storage.");
@@ -75,7 +79,7 @@ public class BlobStorageManager
         return stream;
     }
 
-    public async Task UpdateBlobAsync(string blobName, Stream newDataStream, string containerName)
+    public async Task UpdateBlobAsync(string blobName, Stream? newDataStream, string containerName)
     {
         containerName = string.IsNullOrEmpty(containerName) ? _defaultContainerName : containerName;
         var fullPath = $"{containerName}/{blobName}";

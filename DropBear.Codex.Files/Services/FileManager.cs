@@ -1,11 +1,14 @@
 using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
+using DropBear.Codex.AppLogger.Builders;
 using DropBear.Codex.Core;
 using DropBear.Codex.Files.Enums;
 using DropBear.Codex.Files.Extensions;
 using DropBear.Codex.Files.Models;
 using DropBear.Codex.Files.StorageManagers;
+using Microsoft.Extensions.Logging;
+using ZLogger;
 
 namespace DropBear.Codex.Files.Services;
 
@@ -15,6 +18,7 @@ public class FileManager
     private readonly BlobStorageManager? _blobStorageManager;
     private readonly bool _isWindows = OperatingSystem.IsWindows();
     private readonly LocalStorageManager? _localStorageManager;
+    private readonly ILogger<FileManager> _logger;
     private readonly StorageStrategy _storageStrategy;
 
     internal FileManager(StorageStrategy storageStrategy,
@@ -26,117 +30,174 @@ public class FileManager
         _blobStorageManager = blobStorageManager;
         _localStorageManager = localStorageManager;
         _storageStrategy = storageStrategy;
+
+        var loggerFactory = new LoggerConfigurationBuilder()
+            .SetLogLevel(LogLevel.Information)
+            .EnableConsoleOutput()
+            .Build();
+
+        _logger = loggerFactory.CreateLogger<FileManager>();
     }
 
     #region Public Methods
 
-    public async Task<Result> WriteToFileAsync(DropBearFile file, string fullPath)
+    public async Task<Result> WriteToFileAsync<T>(T data, string fullPath)
     {
         try
         {
-            ValidateFilePath(fullPath);
-            var stream = await file.ToStreamAsync().ConfigureAwait(false);
+            var validationResult = ValidateFilePath(fullPath);
 
-            switch (_storageStrategy)
+            if (!validationResult.IsSuccess)
+                return Result.Failure(validationResult.Error);
+
+            Stream? stream = null;
+
+            if (typeof(T) == typeof(DropBearFile))
             {
-                case StorageStrategy.BlobOnly:
-                    await WriteToBlobStorage(fullPath, stream).ConfigureAwait(false);
-                    break;
-                case StorageStrategy.LocalOnly:
-                    await WriteToLocalStorage(fullPath, stream).ConfigureAwait(false);
-                    break;
-                case StorageStrategy.NoOperation:
-                    break;
-                default:
-                    return Result.Failure("Invalid storage strategy.");
+                if (data is DropBearFile file) stream = await file.ToStreamAsync().ConfigureAwait(false);
+            }
+            else if (typeof(T) == typeof(byte[]))
+            {
+                if (data is byte[] byteArray) stream = new MemoryStream(byteArray);
+            }
+            else
+            {
+                return Result.Failure("Unsupported type for write operation.");
             }
 
-            return Result.Success();
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure(ex.Message,ex);
-        }
-    }
-
-    public async Task<Result<DropBearFile>> ReadFromFileAsync(string fullPath)
-    {
-        try
-        {
-            ValidateFilePath(fullPath);
-            var stream = _storageStrategy switch
+            var writeResult = _storageStrategy switch
             {
+                StorageStrategy.BlobOnly => await WriteToBlobStorage(fullPath, stream).ConfigureAwait(false),
+                StorageStrategy.LocalOnly => await WriteToLocalStorage(fullPath, stream).ConfigureAwait(false),
                 StorageStrategy.NoOperation => null,
-                StorageStrategy.BlobOnly => await ReadFromBlobStorage(fullPath).ConfigureAwait(false),
-                StorageStrategy.LocalOnly => await ReadFromLocalStorage(fullPath).ConfigureAwait(false),
                 _ => null
             };
 
-            if (stream is null)
-                return Result<DropBearFile>.Failure("Failed to read file. Stream is null.");
-
-            return await DropBearFileExtensions.FromStreamAsync(stream).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            return Result<DropBearFile>.Failure(ex.Message,ex);
-        }
-    }
-
-    public async Task<Result> UpdateFileAsync(DropBearFile file, string fullPath)
-    {
-        try
-        {
-            ValidateFilePath(fullPath);
-            var stream = await file.ToStreamAsync().ConfigureAwait(false);
-
-            switch (_storageStrategy)
-            {
-                case StorageStrategy.BlobOnly:
-                    await UpdateBlobStorage(fullPath, stream).ConfigureAwait(false);
-                    break;
-                case StorageStrategy.LocalOnly:
-                    await UpdateLocalStorage(fullPath, stream).ConfigureAwait(false);
-                    break;
-                case StorageStrategy.NoOperation:
-                    break;
-                default:
-                    return Result.Failure("Invalid storage strategy.");
-            }
+            if (writeResult is null || !writeResult.IsSuccess)
+                return Result.Failure(writeResult?.Error ?? "Failed to write file.");
 
             return Result.Success();
         }
         catch (Exception ex)
         {
-            return Result.Failure(ex.Message,ex);
+            return Result.Failure(ex.Message, ex);
         }
     }
-    
+
+    public async Task<Result<T>> ReadFromFileAsync<T>(string fullPath)
+    {
+        try
+        {
+            var validationResult = ValidateFilePath(fullPath);
+            if (!validationResult.IsSuccess)
+                return Result<T>.Failure(validationResult.Error);
+
+            var streamResult = _storageStrategy switch
+            {
+                StorageStrategy.BlobOnly => await ReadFromBlobStorage(fullPath).ConfigureAwait(false),
+                StorageStrategy.LocalOnly => await ReadFromLocalStorage(fullPath).ConfigureAwait(false),
+                StorageStrategy.NoOperation => null,
+                _ => null
+            };
+
+            if (streamResult is null || !streamResult.IsSuccess)
+                return Result<T>.Failure(streamResult?.Error ?? "Failed to read file.");
+
+            var stream = streamResult.Value;
+
+            if (typeof(T) != typeof(byte[]) || typeof(T) != typeof(DropBearFile))
+                return Result<T>.Failure("Unsupported type for read operation.");
+
+            if (typeof(T) == typeof(byte[]))
+            {
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms).ConfigureAwait(false);
+                return Result<T>.Success((T)(object)ms.ToArray()); // Cast byte[] to T via object
+            }
+
+            if (typeof(T) == typeof(DropBearFile))
+            {
+                var file = await DropBearFileExtensions.FromStreamAsync(stream).ConfigureAwait(false);
+                return Result<T>.Success((T)(object)file); // Cast DropBearFile to T via object
+            }
+
+            return Result<T>.Failure("Unsupported type for read operation.");
+        }
+        catch (Exception ex)
+        {
+            return Result<T>.Failure(ex.Message, ex);
+        }
+    }
+
+    public async Task<Result> UpdateFileAsync<T>(T data, string fullPath)
+    {
+        try
+        {
+            var validationResult = ValidateFilePath(fullPath);
+            if (!validationResult.IsSuccess)
+                return Result.Failure(validationResult.Error);
+
+            Stream? stream = default;
+
+            if (typeof(T) == typeof(DropBearFile))
+            {
+                if (data is DropBearFile file) stream = await file.ToStreamAsync().ConfigureAwait(false);
+            }
+            else if (typeof(T) == typeof(byte[]))
+            {
+                if (data is byte[] byteArray) stream = new MemoryStream(byteArray);
+            }
+            else
+            {
+                return Result.Failure("Unsupported type for update operation.");
+            }
+
+            if (stream is null)
+                return Result.Failure("Failed to update file. Stream is null.");
+
+            var updateResult = _storageStrategy switch
+            {
+                StorageStrategy.BlobOnly => await UpdateBlobStorage(fullPath, stream).ConfigureAwait(false),
+                StorageStrategy.LocalOnly => await UpdateLocalStorage(fullPath, stream).ConfigureAwait(false),
+                StorageStrategy.NoOperation => null,
+                _ => null
+            };
+
+            if (updateResult is null || !updateResult.IsSuccess)
+                return Result.Failure(updateResult?.Error ?? "Failed to update file.");
+
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure(ex.Message, ex);
+        }
+    }
+
     public async Task<Result> DeleteFileAsync(string fullPath)
     {
         try
         {
-            ValidateFilePath(fullPath);
+            var validationResult = ValidateFilePath(fullPath);
+            if (!validationResult.IsSuccess)
+                return Result.Failure(validationResult.Error);
 
-            switch (_storageStrategy)
+            var deleteResult = _storageStrategy switch
             {
-                case StorageStrategy.BlobOnly:
-                    await DeleteFromBlobStorage(fullPath).ConfigureAwait(false);
-                    break;
-                case StorageStrategy.LocalOnly:
-                    await DeleteFromLocalStorage(fullPath).ConfigureAwait(false);
-                    break;
-                case StorageStrategy.NoOperation:
-                    break;
-                default:
-                    return Result.Failure("Invalid storage strategy.");
-            }
+                StorageStrategy.BlobOnly => await DeleteFromBlobStorage(fullPath).ConfigureAwait(false),
+                StorageStrategy.LocalOnly => await DeleteFromLocalStorage(fullPath).ConfigureAwait(false),
+                StorageStrategy.NoOperation => null,
+                _ => null
+            };
+
+            if (deleteResult is null || !deleteResult.IsSuccess)
+                return Result.Failure(deleteResult?.Error ?? "Failed to delete file.");
 
             return Result.Success();
         }
         catch (Exception ex)
         {
-            return Result.Failure(ex.Message,ex);
+            return Result.Failure(ex.Message, ex);
         }
     }
 
@@ -144,23 +205,27 @@ public class FileManager
 
     #region Private Methods
 
-    private static void ValidateFilePath(string fullPath)
+    private Result ValidateFilePath(string fullPath)
     {
-        var directoryPath = Path.GetDirectoryName(fullPath) ??
-                            throw new InvalidOperationException("Invalid file path.");
+        var directoryPath = Path.GetDirectoryName(fullPath);
+        if (directoryPath is null) return Result.Failure("Invalid file path.");
 
         if (!Directory.Exists(directoryPath))
         {
             Directory.CreateDirectory(directoryPath);
-            Console.WriteLine("Directory created successfully.");
+            _logger.ZLogInformation($"Directory created successfully.");
         }
 
-        if (HasWritePermissionOnDir(directoryPath)) return;
-        Console.WriteLine("Attempting to add write permissions to the directory.");
+        if (HasWritePermissionOnDir(directoryPath)) return Result.Success();
+
+        _logger.ZLogInformation($"Setting write permissions on directory.");
         var currentUser = WindowsIdentity.GetCurrent().Name;
+
         AddDirectorySecurity(directoryPath, currentUser, FileSystemRights.WriteData, AccessControlType.Allow);
-        if (!HasWritePermissionOnDir(directoryPath))
-            throw new UnauthorizedAccessException("Failed to set necessary write permissions.");
+
+        return !HasWritePermissionOnDir(directoryPath)
+            ? Result.Failure("Failed to set write permissions on directory.")
+            : Result.Success();
     }
 
     private static bool HasWritePermissionOnDir(string path)
@@ -190,71 +255,158 @@ public class FileManager
     #region Storage Helper Methods
 
     // Helper methods for each storage operation, each encapsulating the necessary logic for that storage type
-    private async Task WriteToBlobStorage(string fullPath, Stream stream)
+    private async Task<Result> WriteToBlobStorage(string fullPath, Stream? stream)
     {
-        var containerName = Path.GetDirectoryName(fullPath)?.Replace(@"\", "/", StringComparison.OrdinalIgnoreCase);
-        var blobName = Path.GetFileName(fullPath);
-        if (_blobStorageManager is not null)
+        try
+        {
+            var containerName = Path.GetDirectoryName(fullPath)?.Replace(@"\", "/", StringComparison.OrdinalIgnoreCase);
+            var blobName = Path.GetFileName(fullPath);
+
+            if (_blobStorageManager is null) return Result.Failure("Blob storage manager is not set.");
+
             if (containerName is not null)
                 await _blobStorageManager.WriteAsync(blobName, stream, containerName).ConfigureAwait(false);
+
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.ZLogError(ex, $"Failed to write to blob storage.");
+            return Result.Failure(ex.Message, ex);
+        }
     }
 
-    private async Task WriteToLocalStorage(string fullPath, Stream stream)
+    private async Task<Result> WriteToLocalStorage(string fullPath, Stream? stream)
     {
-        if (_localStorageManager is not null)
-            await _localStorageManager.WriteAsync(Path.GetFileName(fullPath), stream, Path.GetDirectoryName(fullPath))
-                .ConfigureAwait(false);
+        try
+        {
+            if (_localStorageManager is not null)
+                await _localStorageManager
+                    .WriteAsync(Path.GetFileName(fullPath), stream, Path.GetDirectoryName(fullPath))
+                    .ConfigureAwait(false);
+
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.ZLogError(ex, $"Failed to write to local storage.");
+            return Result.Failure(ex.Message, ex);
+        }
     }
 
-    private async Task<Stream> ReadFromBlobStorage(string fullPath)
+    private async Task<Result<Stream>> ReadFromBlobStorage(string fullPath)
     {
-        var containerName = Path.GetDirectoryName(fullPath)?.Replace(@"\", "/", StringComparison.OrdinalIgnoreCase);
-        var blobName = Path.GetFileName(fullPath);
-        if (_blobStorageManager is null) throw new InvalidOperationException("Blob storage manager is not set.");
-        if (containerName is not null)
-            return await _blobStorageManager.ReadAsync(blobName, containerName).ConfigureAwait(false);
+        try
+        {
+            var containerName = Path.GetDirectoryName(fullPath)?.Replace(@"\", "/", StringComparison.OrdinalIgnoreCase);
+            var blobName = Path.GetFileName(fullPath);
+            if (_blobStorageManager is null) throw new InvalidOperationException("Blob storage manager is not set.");
+            if (containerName is not null)
+                return await _blobStorageManager.ReadAsync(blobName, containerName).ConfigureAwait(false);
 
-        throw new InvalidOperationException("Container name is null.");
+            _logger.ZLogError($"Failed to read from blob storage. Container name is null.");
+            return Result<Stream>.Failure("Failed to read from blob storage. Container name is null.");
+        }
+        catch (Exception ex)
+        {
+            _logger.ZLogError(ex, $"Failed to read from blob storage.");
+            return Result<Stream>.Failure(ex.Message, ex);
+        }
     }
 
-    private async Task<Stream> ReadFromLocalStorage(string fullPath)
+    private async Task<Result<Stream>> ReadFromLocalStorage(string fullPath)
     {
-        if (_localStorageManager is null) throw new InvalidOperationException("Local storage manager is not set.");
-        return await _localStorageManager.ReadAsync(Path.GetFileName(fullPath), Path.GetDirectoryName(fullPath))
-            .ConfigureAwait(false);
+        try
+        {
+            if (_localStorageManager is not null)
+                return await _localStorageManager.ReadAsync(Path.GetFileName(fullPath), Path.GetDirectoryName(fullPath))
+                    .ConfigureAwait(false);
+
+            _logger.ZLogError($"Local storage manager is not set.");
+            return Result<Stream>.Failure("Local storage manager is not set.");
+        }
+        catch (Exception ex)
+        {
+            _logger.ZLogError(ex, $"Failed to read from local storage.");
+            return Result<Stream>.Failure(ex.Message, ex);
+        }
     }
 
-    private async Task UpdateBlobStorage(string fullPath, Stream stream)
+    private async Task<Result> UpdateBlobStorage(string fullPath, Stream? stream)
     {
-        var containerName = Path.GetDirectoryName(fullPath)?.Replace(@"\", "/", StringComparison.OrdinalIgnoreCase);
-        var blobName = Path.GetFileName(fullPath);
-        if (_blobStorageManager is not null)
+        try
+        {
+            var containerName = Path.GetDirectoryName(fullPath)?.Replace(@"\", "/", StringComparison.OrdinalIgnoreCase);
+            var blobName = Path.GetFileName(fullPath);
+
+            if (_blobStorageManager is null) return Result.Failure("Blob storage manager is not set.");
+
             if (containerName is not null)
                 await _blobStorageManager.UpdateBlobAsync(blobName, stream, containerName).ConfigureAwait(false);
+
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.ZLogError(ex, $"Failed to update blob storage.");
+            return Result.Failure(ex.Message, ex);
+        }
     }
 
-    private async Task UpdateLocalStorage(string fullPath, Stream stream)
+    private async Task<Result> UpdateLocalStorage(string fullPath, Stream? stream)
     {
-        if (_localStorageManager is not null)
-            await _localStorageManager.UpdateAsync(Path.GetFileName(fullPath), stream, Path.GetDirectoryName(fullPath))
-                .ConfigureAwait(false);
-    }
-    
+        try
+        {
+            if (_localStorageManager is not null)
+                await _localStorageManager
+                    .UpdateAsync(Path.GetFileName(fullPath), stream, Path.GetDirectoryName(fullPath))
+                    .ConfigureAwait(false);
 
-    private async Task DeleteFromBlobStorage(string fullPath)
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.ZLogError(ex, $"Failed to update local storage.");
+            return Result.Failure(ex.Message, ex);
+        }
+    }
+
+    private async Task<Result> DeleteFromBlobStorage(string fullPath)
     {
-        var containerName = Path.GetDirectoryName(fullPath)?.Replace(@"\", "/", StringComparison.OrdinalIgnoreCase);
-        var blobName = Path.GetFileName(fullPath);
-        if (_blobStorageManager is not null)
+        try
+        {
+            var containerName = Path.GetDirectoryName(fullPath)?.Replace(@"\", "/", StringComparison.OrdinalIgnoreCase);
+            var blobName = Path.GetFileName(fullPath);
+
+            if (_blobStorageManager is null) return Result.Failure("Blob storage manager is not set.");
+
             if (containerName is not null)
                 await _blobStorageManager.DeleteAsync(blobName, containerName).ConfigureAwait(false);
+
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.ZLogError(ex, $"Failed to delete from blob storage.");
+            return Result.Failure(ex.Message, ex);
+        }
     }
 
-    private async Task DeleteFromLocalStorage(string fullPath)
+    private async Task<Result> DeleteFromLocalStorage(string fullPath)
     {
-        if (_localStorageManager is not null)
-            await _localStorageManager.DeleteAsync(Path.GetFileName(fullPath), Path.GetDirectoryName(fullPath))
-                .ConfigureAwait(false);
+        try
+        {
+            if (_localStorageManager is not null)
+                await _localStorageManager.DeleteAsync(Path.GetFileName(fullPath), Path.GetDirectoryName(fullPath))
+                    .ConfigureAwait(false);
+
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.ZLogError(ex, $"Failed to delete from local storage.");
+            return Result.Failure(ex.Message, ex);
+        }
     }
 
     #endregion

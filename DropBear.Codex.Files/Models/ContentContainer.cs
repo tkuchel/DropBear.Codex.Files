@@ -3,10 +3,10 @@ using System.Text;
 using System.Text.Json.Serialization;
 using DropBear.Codex.Core;
 using DropBear.Codex.Files.Enums;
+using DropBear.Codex.Hashing;
+using DropBear.Codex.Hashing.Interfaces;
 using DropBear.Codex.Serialization.Factories;
 using DropBear.Codex.Utilities.Extensions;
-using DropBear.Codex.Utilities.Hashing.Builder;
-using DropBear.Codex.Utilities.Hashing.Interfaces;
 
 namespace DropBear.Codex.Files.Models;
 

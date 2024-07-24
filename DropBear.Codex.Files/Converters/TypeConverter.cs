@@ -1,6 +1,10 @@
+#region
+
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+
+#endregion
 
 namespace DropBear.Codex.Files.Converters;
 
@@ -26,6 +30,8 @@ public class TypeConverter : JsonConverter<Type>
         }
     }
 
-    public override void Write(Utf8JsonWriter writer, Type value, JsonSerializerOptions options) =>
+    public override void Write(Utf8JsonWriter writer, Type value, JsonSerializerOptions options)
+    {
         writer.WriteStringValue(value.AssemblyQualifiedName);
+    }
 }

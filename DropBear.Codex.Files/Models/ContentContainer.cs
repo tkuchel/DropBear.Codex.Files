@@ -1,3 +1,5 @@
+#region
+
 using System.Runtime.Versioning;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -8,6 +10,8 @@ using DropBear.Codex.Hashing.Interfaces;
 using DropBear.Codex.Serialization.Factories;
 using DropBear.Codex.Utilities.Extensions;
 
+#endregion
+
 namespace DropBear.Codex.Files.Models;
 
 [SupportedOSPlatform("windows")]
@@ -16,7 +20,11 @@ public class ContentContainer
     private readonly IHasher _hasher = new HashBuilder().GetHasher("XxHash");
     private readonly Dictionary<string, Type> _providers = new(StringComparer.OrdinalIgnoreCase);
 
-    public ContentContainer() => Flags = ContentContainerFlags.NoOperation; // Start with NoOperation as default
+    public ContentContainer()
+    {
+        Flags = ContentContainerFlags.NoOperation;
+        // Start with NoOperation as default
+    }
 
     [JsonPropertyName("flags")] public ContentContainerFlags Flags { get; private set; }
 
@@ -30,14 +38,27 @@ public class ContentContainer
 
     public object? TemporaryData { get; private set; }
 
-    public bool RequiresSerialization() => Flags.HasFlag(ContentContainerFlags.ShouldSerialize);
-    public bool RequiresCompression() => Flags.HasFlag(ContentContainerFlags.ShouldCompress);
-    public bool RequiresEncryption() => Flags.HasFlag(ContentContainerFlags.ShouldEncrypt);
+    public bool RequiresSerialization()
+    {
+        return Flags.HasFlag(ContentContainerFlags.ShouldSerialize);
+    }
+
+    public bool RequiresCompression()
+    {
+        return Flags.HasFlag(ContentContainerFlags.ShouldCompress);
+    }
+
+    public bool RequiresEncryption()
+    {
+        return Flags.HasFlag(ContentContainerFlags.ShouldEncrypt);
+    }
 
     public Result SetData<T>(T? data)
     {
         if (data is null)
+        {
             return Result.Failure("Data is null.");
+        }
 
         switch (data)
         {
@@ -57,34 +78,54 @@ public class ContentContainer
         }
 
         ContentType = typeof(T).FullName ?? "Unsupported/Unknown DataType";
-        if (Data is not null) ComputeAndSetHash();
+        if (Data is not null)
+        {
+            ComputeAndSetHash();
+        }
+
         return Result.Success();
     }
 
     public void AddProvider(string key, Type type)
     {
         if (key is null || type is null)
+        {
             throw new ArgumentException("Key and Type must not be null.", nameof(key));
+        }
 
         if (!_providers.TryAdd(key, type))
+        {
             throw new ArgumentException($"An item with the key '{key}' has already been added.", nameof(key));
+        }
     }
 
     // This method can be used to set up the dictionary during deserialization
     internal void SetProviders(Dictionary<string, Type> providers)
     {
-        foreach (var provider in providers) _providers[provider.Key] = provider.Value;
+        foreach (var provider in providers)
+        {
+            _providers[provider.Key] = provider.Value;
+        }
     }
 
-    public Dictionary<string, Type> GetProvidersDictionary() =>
+    public Dictionary<string, Type> GetProvidersDictionary()
+    {
         // Return a new dictionary copying all entries from the _providers
-        new(_providers, StringComparer.OrdinalIgnoreCase);
+        return new Dictionary<string, Type>(_providers, StringComparer.OrdinalIgnoreCase);
+    }
 
-    internal void ComputeAndSetHash() => ComputeHash();
+    internal void ComputeAndSetHash()
+    {
+        ComputeHash();
+    }
 
     private void ComputeHash()
     {
-        if (Data is null) return;
+        if (Data is null)
+        {
+            return;
+        }
+
         var hashResult = _hasher.EncodeToBase64Hash(Data.ToArray());
         Hash = hashResult.IsSuccess ? hashResult.Value : null;
     }
@@ -93,21 +134,29 @@ public class ContentContainer
     {
         // Check if data is actually present
         if (Data is null || Data.Length is 0)
+        {
             return Result<T>.Failure("No data available.");
+        }
 
         // Verify the integrity of the data
         if (Hash is null)
+        {
             return Result<T>.Failure("No hash available.");
+        }
 
         var hashResult = _hasher.EncodeToBase64Hash(Data.ToArray());
         if (!hashResult.IsSuccess || hashResult.Value != Hash)
+        {
             return Result<T>.Failure("Data integrity check failed.");
+        }
 
         // Handling the case where no serialization is needed and the type is byte[]
         if (typeof(T) == typeof(byte[]))
+        {
             return IsFlagEnabled(ContentContainerFlags.NoSerialization)
                 ? Result<T>.Success((T)(object)Data)
                 : Result<T>.Failure("No serialization required, but type is byte[].");
+        }
 
         // Configure and build the serializer
         var serializerBuilder = new SerializationBuilder();
@@ -118,7 +167,9 @@ public class ContentContainer
         {
             // Use the serializer to deserialize the data
             if (serializer is null)
+            {
                 return Result<T>.Failure("No serializer configured.");
+            }
 
             var result = await serializer.DeserializeAsync<T>(Data).ConfigureAwait(false);
             return Result<T>.Success(result);
@@ -159,41 +210,69 @@ public class ContentContainer
     private Type GetProviderType(string keyName)
     {
         if (_providers.TryGetValue(keyName, out var type))
+        {
             return type;
+        }
+
         throw new KeyNotFoundException($"Provider for {keyName} not found.");
     }
 
     // Method to enable flags
-    public void EnableFlag(ContentContainerFlags flag) => Flags |= flag; // Use bitwise OR to turn on specific flags
+    public void EnableFlag(ContentContainerFlags flag)
+    {
+        Flags |= flag;
+        // Use bitwise OR to turn on specific flags
+    }
 
     // Method to disable flags
-    public void DisableFlag(ContentContainerFlags flag) =>
-        Flags &= ~flag; // Use bitwise AND with NOT to turn off specific flags
+    public void DisableFlag(ContentContainerFlags flag)
+    {
+        Flags &= ~flag;
+        // Use bitwise AND with NOT to turn off specific flags
+    }
 
     // Check if a specific flag is enabled
-    private bool IsFlagEnabled(ContentContainerFlags flag) => (Flags & flag) == flag;
+    private bool IsFlagEnabled(ContentContainerFlags flag)
+    {
+        return (Flags & flag) == flag;
+    }
 
     // Method to print current flags
     public void PrintFlags()
     {
         Console.WriteLine("Current Features Enabled:");
         foreach (ContentContainerFlags flag in Enum.GetValues(typeof(ContentContainerFlags)))
+        {
             if (IsFlagEnabled(flag))
+            {
                 Console.WriteLine("- " + flag);
+            }
+        }
     }
 
     // Adding internal methods to set private properties
-    internal void SetContentType(string type) => ContentType = type;
+    internal void SetContentType(string type)
+    {
+        ContentType = type;
+    }
 
-    internal void SetHash(string? hash) => Hash = hash;
+    internal void SetHash(string? hash)
+    {
+        Hash = hash;
+    }
 
     public override bool Equals(object? obj)
     {
         if (obj is ContentContainer other)
+        {
             return Hash == other.Hash && Equals(Data, other.Data);
+        }
 
         return false;
     }
 
-    public override int GetHashCode() => HashCode.Combine(Hash.GetReadOnlyVersion(), Data.GetReadOnlyVersion());
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(Hash.GetReadOnlyVersion(), Data.GetReadOnlyVersion());
+    }
 }

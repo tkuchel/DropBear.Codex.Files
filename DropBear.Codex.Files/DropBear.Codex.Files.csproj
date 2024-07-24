@@ -4,7 +4,7 @@
         <TargetFramework>net8.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <Version>2024.4.0</Version>
+        <Version>2024.7.0</Version>
         <Title>DropBear.Codex.Files</Title>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <Authors>Terrence Kuchel (DropBear)</Authors>
@@ -18,25 +18,28 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="DropBear.Codex.AppLogger" Version="2024.4.14" />
-        <PackageReference Include="DropBear.Codex.Core" Version="2024.4.5" />
-        <PackageReference Include="DropBear.Codex.Hashing" Version="2024.4.7" />
-        <PackageReference Include="DropBear.Codex.Serialization" Version="2024.4.14" />
-        <PackageReference Include="DropBear.Codex.Utilities" Version="2024.4.19" />
-        <PackageReference Include="DropBear.Codex.Validation" Version="2024.4.1" />
+        <PackageReference Include="DropBear.Codex.AppLogger" Version="2024.7.3" />
+        <PackageReference Include="DropBear.Codex.Core" Version="2024.7.1" />
+        <PackageReference Include="DropBear.Codex.Hashing" Version="2024.7.1" />
+        <PackageReference Include="DropBear.Codex.Serialization" Version="2024.7.1" />
+        <PackageReference Include="DropBear.Codex.Utilities" Version="2024.7.1" />
+        <PackageReference Include="DropBear.Codex.Validation" Version="2024.7.1" />
         <PackageReference Include="FastRsyncNet" Version="2.4.0" />
         <PackageReference Include="FastRsyncNet.Compression" Version="1.1.0" />
-        <PackageReference Include="FluentStorage.Azure.Blobs" Version="5.2.2" />
-        <PackageReference Include="MessagePackAnalyzer" Version="2.5.140">
+        <PackageReference Include="FluentStorage.Azure.Blobs" Version="5.2.3" />
+        <PackageReference Include="MessagePackAnalyzer" Version="2.5.171">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="Meziantou.DotNet.CodingStandard" Version="1.0.123">
+        <PackageReference Include="Meziantou.DotNet.CodingStandard" Version="1.0.125">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.0" />
+        <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />
         <PackageReference Include="System.IO.FileSystem.AccessControl" Version="5.0.0" />
+        <PackageReference Update="Nerdbank.GitVersioning">
+          <Version>3.6.139</Version>
+        </PackageReference>
     </ItemGroup>
 
     <ItemGroup>

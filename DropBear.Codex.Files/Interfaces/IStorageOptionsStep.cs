@@ -1,4 +1,8 @@
+#region
+
 using DropBear.Codex.Files.Enums;
+
+#endregion
 
 namespace DropBear.Codex.Files.Interfaces;
 

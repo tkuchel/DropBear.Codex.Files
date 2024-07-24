@@ -1,8 +1,12 @@
+#region
+
 using System.Runtime.Versioning;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DropBear.Codex.Files.Enums;
 using DropBear.Codex.Files.Models;
+
+#endregion
 
 namespace DropBear.Codex.Files.Converters;
 
@@ -15,6 +19,7 @@ public class ContentContainerConverter : JsonConverter<ContentContainer>
         Dictionary<string, Type> providers = new(StringComparer.OrdinalIgnoreCase);
 
         while (reader.Read())
+        {
             switch (reader.TokenType)
             {
                 case JsonTokenType.EndObject:
@@ -57,6 +62,7 @@ public class ContentContainerConverter : JsonConverter<ContentContainer>
 #pragma warning restore MA0015
 #pragma warning restore CA2208
             }
+        }
 
         throw new JsonException("Expected EndObject token.");
     }

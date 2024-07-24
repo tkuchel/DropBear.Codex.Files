@@ -1,5 +1,9 @@
+#region
+
 using System.ComponentModel;
 using System.Text.Json.Serialization;
+
+#endregion
 
 namespace DropBear.Codex.Files.Enums;
 

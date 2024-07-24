@@ -1,7 +1,11 @@
+#region
+
 using System.Collections.ObjectModel;
 using System.Runtime.Versioning;
 using System.Text.Json.Serialization;
 using DropBear.Codex.Utilities.Extensions;
+
+#endregion
 
 namespace DropBear.Codex.Files.Models;
 
@@ -41,19 +45,26 @@ public class DropBearFile
 
     [JsonPropertyName("currentVersion")] public FileVersion? CurrentVersion { get; set; }
 
-    public static string GetDefaultExtension() => DefaultExtension;
+    public static string GetDefaultExtension()
+    {
+        return DefaultExtension;
+    }
 
     // Methods for adding and modifying the DropBearFile contents, these do not need serialization attributes
     public void AddMetadata(string key, string value)
     {
         if (!Metadata.TryAdd(key, value))
+        {
             throw new ArgumentException("Duplicate metadata key.", nameof(key));
+        }
     }
 
     public void RemoveMetadata(string key)
     {
         if (!Metadata.Remove(key))
+        {
             throw new ArgumentException("Metadata key not found.", nameof(key));
+        }
     }
 
     public void AddContentContainer(ContentContainer container)
@@ -65,17 +76,22 @@ public class DropBearFile
     public void RemoveContentContainer(ContentContainer container)
     {
         if (!ContentContainers.Remove(container))
+        {
             throw new ArgumentException("Content container not found.", nameof(container));
+        }
     }
 
     public override bool Equals(object? obj)
     {
         if (obj is DropBearFile other)
+        {
             return CurrentVersion is not null &&
                    FileName == other.FileName &&
                    CurrentVersion.Equals(other.CurrentVersion) &&
                    Metadata.SequenceEqual(other.Metadata) &&
                    ContentContainers.SequenceEqual(other.ContentContainers);
+        }
+
         return false;
     }
 
@@ -90,7 +106,11 @@ public class DropBearFile
             hash.Add(item.Value);
         }
 
-        foreach (var container in ContentContainers) hash.Add(container);
+        foreach (var container in ContentContainers)
+        {
+            hash.Add(container);
+        }
+
         return hash.ToHashCode();
     }
 }

@@ -1,6 +1,10 @@
+#region
+
 using FastRsync.Delta;
 using FastRsync.Diagnostics;
 using FastRsync.Signature;
+
+#endregion
 
 namespace DropBear.Codex.Files.Utils;
 

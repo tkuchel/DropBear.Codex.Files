@@ -1,4 +1,8 @@
+#region
+
 using Microsoft.IO;
+
+#endregion
 
 namespace DropBear.Codex.Files.Interfaces;
 

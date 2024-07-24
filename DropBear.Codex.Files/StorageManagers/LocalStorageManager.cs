@@ -1,8 +1,12 @@
+#region
+
 using Microsoft.IO;
+
+#endregion
 
 namespace DropBear.Codex.Files.StorageManagers;
 
-public class LocalStorageManager 
+public class LocalStorageManager
 {
     private readonly string _baseDirectory;
     private readonly RecyclableMemoryStreamManager _memoryStreamManager;
@@ -12,10 +16,16 @@ public class LocalStorageManager
         _baseDirectory = baseDirectory ?? throw new ArgumentNullException(nameof(baseDirectory));
         _memoryStreamManager = memoryStreamManager ?? throw new ArgumentNullException(nameof(memoryStreamManager));
 
-        if (!Directory.Exists(_baseDirectory)) Directory.CreateDirectory(_baseDirectory);
+        if (!Directory.Exists(_baseDirectory))
+        {
+            Directory.CreateDirectory(_baseDirectory);
+        }
     }
 
-    public string GetBaseDirectory() => _baseDirectory;
+    public string GetBaseDirectory()
+    {
+        return _baseDirectory;
+    }
 
     public async Task WriteAsync(string fileName, Stream? dataStream, string? subDirectory = null)
     {
@@ -23,14 +33,21 @@ public class LocalStorageManager
         var fullPath = Path.Combine(directoryPath, fileName);
 
         // Ensure directory exists
-        if (!Directory.Exists(directoryPath)) Directory.CreateDirectory(directoryPath);
+        if (!Directory.Exists(directoryPath))
+        {
+            Directory.CreateDirectory(directoryPath);
+        }
 
         // Ensure data stream is not null
         if (dataStream is null)
+        {
             throw new ArgumentNullException(nameof(dataStream), "The data stream cannot be null.");
+        }
 
         if (dataStream.Length == 0)
+        {
             throw new InvalidOperationException("Attempting to write an empty stream to blob storage.");
+        }
 
 
         if (!dataStream.CanSeek)
@@ -59,7 +76,10 @@ public class LocalStorageManager
         var directoryPath = Path.Combine(_baseDirectory, subDirectory ?? string.Empty);
         var fullPath = Path.Combine(directoryPath, fileName);
 
-        if (!File.Exists(fullPath)) throw new FileNotFoundException("The specified file does not exist.", fullPath);
+        if (!File.Exists(fullPath))
+        {
+            throw new FileNotFoundException("The specified file does not exist.", fullPath);
+        }
 
         var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096,
             FileOptions.Asynchronous);
@@ -82,9 +102,13 @@ public class LocalStorageManager
         var fullPath = Path.Combine(directoryPath, fileName);
 
         if (File.Exists(fullPath))
+        {
             File.Delete(fullPath);
+        }
         else
+        {
             throw new FileNotFoundException("The specified file does not exist.", fullPath);
+        }
     }
 
     public async Task UpdateAsync(string fileName, Stream? newDataStream, string? subDirectory = null)
@@ -94,14 +118,18 @@ public class LocalStorageManager
 
         // Ensure file exists before trying to update
         if (!File.Exists(fullPath))
+        {
             throw new FileNotFoundException("The specified file does not exist for update.", fullPath);
+        }
 
         // Delete existing file
         File.Delete(fullPath);
-        
+
         // Check if the new data stream is null
         if (newDataStream is null)
+        {
             throw new ArgumentNullException(nameof(newDataStream), "The new data stream cannot be null.");
+        }
 
         // Write the new data
         var fileStream = new FileStream(fullPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, true);

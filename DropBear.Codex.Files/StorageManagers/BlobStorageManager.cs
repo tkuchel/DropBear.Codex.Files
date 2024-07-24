@@ -1,6 +1,9 @@
-using DropBear.Codex.Files.Interfaces;
+#region
+
 using FluentStorage.Blobs;
 using Microsoft.IO;
+
+#endregion
 
 namespace DropBear.Codex.Files.StorageManagers;
 
@@ -28,13 +31,17 @@ public class BlobStorageManager
 
         // Validate the blob name and path using existing validation (updated to check full path length etc.)
         fullPath = ValidateBlobName(fullPath);
-        
+
         // Ensure data stream is not null
         if (dataStream is null)
+        {
             throw new ArgumentNullException(nameof(dataStream), "The data stream cannot be null.");
+        }
 
         if (dataStream.Length == 0)
+        {
             throw new InvalidOperationException("Attempting to write an empty stream to blob storage.");
+        }
 
 
         if (!dataStream.CanSeek)
@@ -70,7 +77,9 @@ public class BlobStorageManager
         var readStream = await _blobStorage.OpenReadAsync(fullPath, CancellationToken.None).ConfigureAwait(false);
 
         if (readStream is null)
+        {
             throw new FileNotFoundException("Blob not found or no access.", fullPath);
+        }
 
         // Copy data from the blob stream to the managed memory stream
         await readStream.CopyToAsync(stream).ConfigureAwait(false);
@@ -87,7 +96,9 @@ public class BlobStorageManager
         // Check if the blob exists
         var exists = await _blobStorage.ExistsAsync(new[] { fullPath }, CancellationToken.None).ConfigureAwait(false);
         if (!exists.FirstOrDefault())
+        {
             throw new FileNotFoundException("The specified blob does not exist.", fullPath);
+        }
 
         // Delete existing blob
         await _blobStorage.DeleteAsync(new[] { fullPath }, CancellationToken.None).ConfigureAwait(false);
@@ -106,9 +117,15 @@ public class BlobStorageManager
     private static string ValidateBlobName(string blobName)
     {
         if (string.IsNullOrEmpty(blobName))
+        {
             throw new ArgumentException("Blob name cannot be null or empty.", nameof(blobName));
+        }
+
         if (blobName.Length > 1024)
+        {
             throw new ArgumentException("Blob name cannot exceed 1024 characters.", nameof(blobName));
+        }
+
         return blobName;
     }
 }

@@ -1,4 +1,8 @@
+#region
+
 using DropBear.Codex.Serialization.Interfaces;
+
+#endregion
 
 namespace DropBear.Codex.Files.Interfaces;
 
